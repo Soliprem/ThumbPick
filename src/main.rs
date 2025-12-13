@@ -135,7 +135,7 @@ fn setup_keyboard_controller(
 
 fn handle_selection(flowbox: &FlowBox) {
     if let Some(child) = flowbox.selected_children().first() {
-        println!("path: {}", child.widget_name());
+        println!("{}", child.widget_name());
         std::process::exit(0);
     }
 }
