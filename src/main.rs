@@ -202,7 +202,20 @@ fn run_scan_and_decode(dir_path: String, sender: Sender<Vec<(PathBuf, gdk::Textu
         let thumbnails: Vec<_> = chunk
             .par_iter()
             .filter_map(|path| {
-                let pixbuf = Pixbuf::from_file_at_scale(path, THUMB_SIZE, THUMB_SIZE, true).ok()?;
+                let pixbuf = Pixbuf::from_file_at_scale(path, THUMB_SIZE, THUMB_SIZE, true)
+                    .or_else(|_| {
+                        // Fallback: load full size and scale with aspect ratio preserved
+                        // NOTE: necessary because gifs often break with from_file_at_scale
+                        let full = Pixbuf::from_file(path)?;
+                        let width = full.width();
+                        let height = full.height();
+                        let scale = (THUMB_SIZE as f64 / width.max(height) as f64).min(1.0);
+                        let new_width = (width as f64 * scale) as i32;
+                        let new_height = (height as f64 * scale) as i32;
+                        full.scale_simple(new_width, new_height, gdk_pixbuf::InterpType::Bilinear)
+                            .ok_or_else(|| glib::Error::new(glib::FileError::Failed, "Scale failed"))
+                    })
+                    .ok()?;
                 let texture = gdk::Texture::for_pixbuf(&pixbuf);
                 Some((path.clone(), texture))
             })
