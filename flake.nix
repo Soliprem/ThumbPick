@@ -62,21 +62,21 @@
               rustc = rustToolchain;
             }).buildPackage
               {
-                pname = "image-gallery-picker";
+                pname = "thumbpick";
                 version = "0.1.0";
                 src = ./.;
 
                 inherit buildInputs nativeBuildInputs;
               };
         in
-        pkgs.runCommand "image-gallery-picker"
+        pkgs.runCommand "thumbpick"
           {
             nativeBuildInputs = [ pkgs.makeWrapper ];
           }
           ''
             mkdir -p $out/bin
-            cp ${unwrapped}/bin/image-gallery-picker $out/bin/
-            wrapProgram $out/bin/image-gallery-picker \
+            cp ${unwrapped}/bin/thumbpick $out/bin/
+            wrapProgram $out/bin/thumbpick \
               --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
           '';
     };

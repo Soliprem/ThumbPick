@@ -1,5 +1,5 @@
 [package]
-name = "image-gallery-picker"
+name = "thumbpick"
 version = "0.1.0"
 edition = "2021"
 

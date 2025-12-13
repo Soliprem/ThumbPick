@@ -460,18 +460,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
-name = "image-gallery-picker"
-version = "0.1.0"
-dependencies = [
- "async-channel",
- "gdk-pixbuf",
- "glib",
- "gtk4",
- "rayon",
- "walkdir",
-]
-
-[[package]]
 name = "indexmap"
 version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -691,6 +679,18 @@ name = "target-lexicon"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df7f62577c25e07834649fc3b39fafdc597c0a3527dc1c60129201ccfcbaa50c"
+
+[[package]]
+name = "thumbpick"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "gdk-pixbuf",
+ "glib",
+ "gtk4",
+ "rayon",
+ "walkdir",
+]
 
 [[package]]
 name = "toml"

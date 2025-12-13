@@ -11,7 +11,7 @@ use std::rc::Rc;
 use std::thread;
 use walkdir::WalkDir;
 
-const APP_ID: &str = "com.gallery.picker";
+const APP_ID: &str = "eu.soliprem.thumbpick";
 const THUMB_SIZE: i32 = 200;
 const BATCH_SIZE: usize = 100;
 
@@ -53,7 +53,7 @@ fn build_ui(app: &Application, dir_path: &str) {
 fn create_main_window(app: &Application) -> ApplicationWindow {
     ApplicationWindow::builder()
         .application(app)
-        .title("Image Gallery Picker")
+        .title("ThumbPick")
         .default_width(1200)
         .default_height(800)
         .build()
@@ -135,7 +135,7 @@ fn setup_keyboard_controller(
 
 fn handle_selection(flowbox: &FlowBox) {
     if let Some(child) = flowbox.selected_children().first() {
-        println!("{}", child.widget_name());
+        println!("path: {}", child.widget_name());
         std::process::exit(0);
     }
 }
