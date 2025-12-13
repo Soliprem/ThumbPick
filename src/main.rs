@@ -167,7 +167,6 @@ fn handle_search_input(
     };
 
     if should_invalidate {
-        // Update the Overlay Label
         if current_text.is_empty() {
             label.set_visible(false);
         } else {
@@ -182,7 +181,7 @@ fn handle_search_input(
     glib::Propagation::Proceed
 }
 
-// --- Async Pipeline (Unchanged) ---
+// --- Async Pipeline ---
 
 fn spawn_image_loader(flowbox: FlowBox, dir_path: String) {
     glib::spawn_future_local(async move {
