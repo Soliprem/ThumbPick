@@ -43,15 +43,6 @@
     {
       devShell.${system} = pkgs.mkShell {
         inherit buildInputs nativeBuildInputs;
-
-        # Additional build inputs for dev shell
-        packages = with pkgs; [
-          nushell
-        ];
-
-        shellHook = ''
-          exec nu
-        '';
       };
 
       packages.${system}.default =
