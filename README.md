@@ -58,7 +58,7 @@ environment.
 **Run directly:**
 
 ```bash
-nix run github:username/thumbpick <directory>
+nix run github:soliprem/thumbpick <directory>
 ```
 
 **Install:**
