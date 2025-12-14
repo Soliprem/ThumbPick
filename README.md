@@ -88,7 +88,18 @@ Ready to go!
 
 ### Cargo
 
-Ensure you have GTK4 development libraries installed on your system.
+Ensure you have GTK4 development libraries installed on your system (should be
+`gtk4`, `glib2`, `gdk-pixbuf2`, `cairo`, `pango`).
+
+#### From Source
+
+```bash
+git clone https://github.com/soliprem/thumbpick
+cd thumbpick
+cargo install --path .
+```
+
+Or run directly without installing:
 
 ```bash
 cargo run --release -- <directory>
