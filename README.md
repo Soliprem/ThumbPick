@@ -28,7 +28,7 @@ lacked one of these requirements, or also did a bunch more things I didn't need.
 ## Usage
 
 ```bash
-thumbpick <directory>
+thumbpick <directory> [--vi | --vi-mode]
 ```
 
 **Example:** Pipe the selected image to `feh` or a wallpaper setter:
@@ -40,6 +40,9 @@ swww img "$(thumbpick ~/Pictures/Wallpapers)"
 
 ## Controls
 
+Regardless of the mode you're in, `Escape` will also close the window if you're
+not currently searching.
+
 | Input            | Action                                   |
 | ---------------- | ---------------------------------------- |
 | **Alphanumeric** | Append character to search               |
@@ -47,6 +50,16 @@ swww img "$(thumbpick ~/Pictures/Wallpapers)"
 | **Escape**       | clear active filter                      |
 | **Double Click** | Open image immediately with `xdg-open`   |
 | **Enter**        | Print selected path to `stdout` and exit |
+
+**Vi Mode (`--vi | --vi-mode`)**
+
+| Input         | Action                                  |
+| ------------- | --------------------------------------- |
+| h / j / k / l | Navigate selection (Left/Down/Up/Right) |
+| /             | Enter search mode                       |
+| Escape        | Exit search mode / Clear active filter  |
+| Backspace     | Remove last char / Exit search if empty |
+| Enter         | Print selected path to stdout and exit  |
 
 ## Installation
 
@@ -59,6 +72,8 @@ environment.
 
 ```bash
 nix run github:soliprem/thumbpick <directory>
+# or
+nix run github:soliprem/thumbpick -- <directory> --vi
 ```
 
 **Install:**
