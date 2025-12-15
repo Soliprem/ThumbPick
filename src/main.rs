@@ -2,7 +2,8 @@ use async_channel::Sender;
 use gdk_pixbuf::Pixbuf;
 use gtk4::{
     gdk, glib, prelude::*, Application, ApplicationWindow, EventControllerKey, FlowBox,
-    FlowBoxChild, GestureClick, Label, Overlay, Picture, PropagationPhase, ScrolledWindow,
+    FlowBoxChild, GestureClick, Label, MovementStep, Overlay, Picture, PropagationPhase,
+    ScrolledWindow,
 };
 use rayon::prelude::*;
 use std::cell::RefCell;
@@ -19,17 +20,29 @@ type SearchState = Rc<RefCell<String>>;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <directory>", args[0]);
+
+    let mut dir_path = String::new();
+    let mut vi_mode = false;
+
+    for arg in args.iter().skip(1) {
+        match arg.as_str() {
+            "--vi" | "--vi-mode" => vi_mode = true,
+            path if !path.starts_with("--") => dir_path = path.to_string(),
+            _ => {}
+        }
+    }
+
+    if dir_path.is_empty() {
+        eprintln!("Usage: thumbpick <directory> [--vi | --vi-mode]");
         std::process::exit(1);
     }
-    let dir_path = args[1].clone();
+
     let app = Application::builder().application_id(APP_ID).build();
-    app.connect_activate(move |app| build_ui(app, &dir_path));
+    app.connect_activate(move |app| build_ui(app, &dir_path, vi_mode));
     app.run_with_args(&Vec::<String>::new());
 }
 
-fn build_ui(app: &Application, dir_path: &str) {
+fn build_ui(app: &Application, dir_path: &str, vi_mode: bool) {
     let window = create_main_window(app);
     let flowbox = create_flowbox();
     let scrolled = wrap_in_scroll(&flowbox);
@@ -41,7 +54,7 @@ fn build_ui(app: &Application, dir_path: &str) {
 
     setup_filter_func(&flowbox, search_query.clone());
 
-    setup_keyboard_controller(&window, &flowbox, search_query, search_label);
+    setup_keyboard_controller(&window, &flowbox, search_query, search_label, vi_mode);
 
     spawn_image_loader(flowbox, dir_path.to_string());
 
@@ -114,23 +127,89 @@ fn setup_keyboard_controller(
     window: &ApplicationWindow,
     flowbox: &FlowBox,
     query_state: SearchState,
-    search_label: Label, // Passed in here
+    search_label: Label,
+    vi_mode: bool,
 ) {
     let controller = EventControllerKey::new();
     controller.set_propagation_phase(PropagationPhase::Capture);
     let flowbox = flowbox.clone();
+    let search_mode_active = Rc::new(RefCell::new(false));
 
     controller.connect_key_pressed(move |_, keyval, _, _| {
         if keyval == gdk::Key::Return || keyval == gdk::Key::KP_Enter {
             handle_selection(&flowbox);
             return glib::Propagation::Stop;
         }
+        if vi_mode {
+            let mut is_searching = search_mode_active.borrow_mut();
+            if *is_searching {
+                if keyval == gdk::Key::Escape {
+                    *is_searching = false;
+                    clear_search(&query_state, &flowbox, &search_label);
+                    return glib::Propagation::Stop;
+                }
+                let was_empty = query_state.borrow().is_empty();
+                let propagation =
+                    handle_search_input(keyval, &query_state, &flowbox, &search_label);
+                if was_empty && keyval == gdk::Key::BackSpace {
+                    *is_searching = false;
+                    clear_search(&query_state, &flowbox, &search_label);
+                    if !flowbox
+                        .selected_children()
+                        .first()
+                        .is_some_and(|c| c.grab_focus())
+                    {
+                        flowbox.grab_focus();
+                    }
+                    return glib::Propagation::Stop;
+                }
 
-        // Pass label to input handler
+                if *is_searching && query_state.borrow().is_empty() {
+                    search_label.set_text("Search: ");
+                    search_label.set_visible(true);
+                }
+
+                return propagation;
+            }
+            let flowbox_focus = flowbox.clone();
+            let move_focus = move |direction: gtk4::DirectionType| {
+                if flowbox_focus.selected_children().is_empty() {
+                    if let Some(child) = flowbox_focus.child_at_index(0) {
+                        child.grab_focus();
+                        flowbox_focus.select_child(&child);
+                    }
+                } else {
+                    flowbox_focus.child_focus(direction);
+                }
+            };
+            match keyval {
+                gdk::Key::h => move_focus(gtk4::DirectionType::Left),
+                gdk::Key::j => move_focus(gtk4::DirectionType::Down),
+                gdk::Key::k => move_focus(gtk4::DirectionType::Up),
+                gdk::Key::l => move_focus(gtk4::DirectionType::Right),
+                gdk::Key::slash => {
+                    *is_searching = true;
+                    search_label.set_text("Search: ");
+                    search_label.set_visible(true);
+                    return glib::Propagation::Stop;
+                }
+                _ => return glib::Propagation::Proceed,
+            }
+            return glib::Propagation::Stop;
+        }
+
         handle_search_input(keyval, &query_state, &flowbox, &search_label)
     });
 
     window.add_controller(controller);
+}
+
+// --- The "Smart" Helper ---
+
+fn clear_search(query_state: &SearchState, flowbox: &FlowBox, label: &Label) {
+    query_state.borrow_mut().clear();
+    label.set_visible(false);
+    flowbox.invalidate_filter();
 }
 
 fn handle_selection(flowbox: &FlowBox) {
@@ -213,7 +292,9 @@ fn run_scan_and_decode(dir_path: String, sender: Sender<Vec<(PathBuf, gdk::Textu
                         let new_width = (width as f64 * scale) as i32;
                         let new_height = (height as f64 * scale) as i32;
                         full.scale_simple(new_width, new_height, gdk_pixbuf::InterpType::Bilinear)
-                            .ok_or_else(|| glib::Error::new(glib::FileError::Failed, "Scale failed"))
+                            .ok_or_else(|| {
+                                glib::Error::new(glib::FileError::Failed, "Scale failed")
+                            })
                     })
                     .ok()?;
                 let texture = gdk::Texture::for_pixbuf(&pixbuf);
