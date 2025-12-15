@@ -133,7 +133,6 @@ fn setup_keyboard_controller(
     let controller = EventControllerKey::new();
     controller.set_propagation_phase(PropagationPhase::Capture);
     let flowbox = flowbox.clone();
-
     let search_mode_active = Rc::new(RefCell::new(false));
 
     controller.connect_key_pressed(move |_, keyval, _, _| {
@@ -143,38 +142,62 @@ fn setup_keyboard_controller(
         }
         if vi_mode {
             let mut is_searching = search_mode_active.borrow_mut();
-            if keyval == gdk::Key::Escape {
-                *is_searching = false;
-                clear_search(&query_state, &flowbox, &search_label);
-                return glib::Propagation::Stop;
-            }
-            if !*is_searching {
-                let step = match keyval {
-                    gdk::Key::h => Some((MovementStep::VisualPositions, -1)),
-                    gdk::Key::j => Some((MovementStep::DisplayLines, 1)),
-                    gdk::Key::k => Some((MovementStep::DisplayLines, -1)),
-                    gdk::Key::l => Some((MovementStep::VisualPositions, 1)),
-                    gdk::Key::slash => {
-                        *is_searching = true;
-                        search_label.set_text("Search: ");
-                        search_label.set_visible(true);
-                        return glib::Propagation::Stop;
-                    }
-                    _ => None,
-                };
-
-                if let Some((movement, count)) = step {
-                    flowbox.emit_by_name::<(bool)>("move-cursor", &[&movement, &count, &false, &false]);
-                    return glib::Propagation::Proceed;
+            if *is_searching {
+                if keyval == gdk::Key::Escape {
+                    *is_searching = false;
+                    clear_search(&query_state, &flowbox, &search_label);
+                    return glib::Propagation::Stop;
                 }
-            } 
-        };
+                let was_empty = query_state.borrow().is_empty();
+                let propagation =
+                    handle_search_input(keyval, &query_state, &flowbox, &search_label);
+                if was_empty && keyval == gdk::Key::BackSpace {
+                    *is_searching = false;
+                    clear_search(&query_state, &flowbox, &search_label);
+                    return glib::Propagation::Stop;
+                }
+
+                if *is_searching && query_state.borrow().is_empty() {
+                    search_label.set_text("Search: ");
+                    search_label.set_visible(true);
+                }
+
+                return propagation;
+            }
+            let flowbox_focus = flowbox.clone();
+            let move_focus = move |direction: gtk4::DirectionType| {
+                if flowbox_focus.selected_children().is_empty() {
+                    if let Some(child) = flowbox_focus.child_at_index(0) {
+                        child.grab_focus();
+                        flowbox_focus.select_child(&child);
+                    }
+                } else {
+                    flowbox_focus.child_focus(direction);
+                }
+            };
+            match keyval {
+                gdk::Key::h => move_focus(gtk4::DirectionType::Left),
+                gdk::Key::j => move_focus(gtk4::DirectionType::Down),
+                gdk::Key::k => move_focus(gtk4::DirectionType::Up),
+                gdk::Key::l => move_focus(gtk4::DirectionType::Right),
+                gdk::Key::slash => {
+                    *is_searching = true;
+                    search_label.set_text("Search: ");
+                    search_label.set_visible(true);
+                    return glib::Propagation::Stop;
+                }
+                _ => return glib::Propagation::Proceed,
+            }
+            return glib::Propagation::Stop;
+        }
 
         handle_search_input(keyval, &query_state, &flowbox, &search_label)
     });
 
     window.add_controller(controller);
 }
+
+// --- The "Smart" Helper ---
 
 fn clear_search(query_state: &SearchState, flowbox: &FlowBox, label: &Label) {
     query_state.borrow_mut().clear();
