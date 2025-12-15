@@ -136,12 +136,15 @@ fn setup_keyboard_controller(
     let search_mode_active = Rc::new(RefCell::new(false));
 
     controller.connect_key_pressed(move |_, keyval, _, _| {
+        let mut is_searching = search_mode_active.borrow_mut();
         if keyval == gdk::Key::Return || keyval == gdk::Key::KP_Enter {
             handle_selection(&flowbox);
             return glib::Propagation::Stop;
         }
+        if keyval == gdk::Key::Escape && !*is_searching {
+            std::process::exit(0);
+        }
         if vi_mode {
-            let mut is_searching = search_mode_active.borrow_mut();
             if *is_searching {
                 if keyval == gdk::Key::Escape {
                     *is_searching = false;
