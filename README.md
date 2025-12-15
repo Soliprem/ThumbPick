@@ -53,13 +53,14 @@ not currently searching.
 
 **Vi Mode (`--vi | --vi-mode`)**
 
-| Input         | Action                                  |
-| ------------- | --------------------------------------- |
-| h / j / k / l | Navigate selection (Left/Down/Up/Right) |
-| /             | Enter search mode                       |
-| Escape        | Exit search mode / Clear active filter  |
-| Backspace     | Remove last char / Exit search if empty |
-| Enter         | Print selected path to stdout and exit  |
+| Input             | Action                                     |
+| ----------------- | ------------------------------------------ |
+| **h / j / k / l** | Navigate selection (Left/Down/Up/Right)    |
+| **/**             | Enter search mode                          |
+| **Escape**        | Exit search mode / Clear active filter     |
+| **Backspace**     | Remove last char / Exit search if empty    |
+| **Double Click**  | Open image immediately with `xdg-open`     |
+| **Enter**         | Print selected path to `stdout` and `exit` |
 
 ## Installation
 
