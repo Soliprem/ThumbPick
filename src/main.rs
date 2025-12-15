@@ -154,6 +154,13 @@ fn setup_keyboard_controller(
                 if was_empty && keyval == gdk::Key::BackSpace {
                     *is_searching = false;
                     clear_search(&query_state, &flowbox, &search_label);
+                    if !flowbox
+                        .selected_children()
+                        .first()
+                        .is_some_and(|c| c.grab_focus())
+                    {
+                        flowbox.grab_focus();
+                    }
                     return glib::Propagation::Stop;
                 }
 
