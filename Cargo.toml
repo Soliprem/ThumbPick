@@ -2,7 +2,7 @@
 name = "thumbpick"
 version = "0.1.0"
 edition = "2021"
-license-file = "LICENSE"
+license = "GPL-3.0-or-later"
 description = "lightweight, scriptable, keyboard-centric image picker"
 repository = "https://github.com/soliprem/thumbpick"
 homepage = "https://github.com/soliprem/thumbpick"
