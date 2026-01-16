@@ -55,7 +55,7 @@ fn build_ui(app: &Application, dir_path: &str, vi_mode: bool) {
 
     setup_keyboard_controller(&window, &flowbox, search_query, search_label, vi_mode);
 
-    spawn_image_loader(flowbox, dir_path.to_string());
+    spawn_image_loader(flowbox, dir_path.to_string(), vi_mode);
 
     window.present();
 }
@@ -143,9 +143,7 @@ fn setup_keyboard_controller(
                     handle_selection(&flowbox);
                     return glib::Propagation::Stop;
                 }
-                gdk::Key::Escape => {
-                    std::process::exit(0);
-                }
+                gdk::Key::Escape => std::process::exit(0),
                 _ => {}
             };
         };
@@ -160,23 +158,17 @@ fn setup_keyboard_controller(
                     }
                     gdk::Key::Return => {
                         *is_searching = false;
-                        let flowbox_foc = flowbox.clone();
-                        if let Some(child) = flowbox_foc.child_at_index(0) {
-                            child.grab_focus();
-                            flowbox_foc.select_child(&child);
-                        }
+                        focus_first_visible(&flowbox);
+                        // NOTE: this is very unelegant and a bit clunky
+                        flowbox.child_focus(gtk4::DirectionType::Right);
                         return glib::Propagation::Stop;
                     }
                     gdk::Key::BackSpace => {
                         if query_state.borrow().is_empty() {
                             *is_searching = false;
                             clear_search(&query_state, &flowbox, &search_label);
-                            if !flowbox
-                                .selected_children()
-                                .first()
-                                .is_some_and(|c| c.grab_focus())
-                            {
-                                flowbox.grab_focus();
+                            if flowbox.selected_children().is_empty() {
+                                focus_first_visible(&flowbox);
                             }
                             return glib::Propagation::Stop;
                         }
@@ -184,26 +176,27 @@ fn setup_keyboard_controller(
                     _ => {}
                 };
 
+                // Search Input Processing
                 let initial_propagation =
                     handle_search_input(keyval, &query_state, &flowbox, &search_label);
+
                 if *is_searching && query_state.borrow().is_empty() {
                     search_label.set_text("Search: ");
                     search_label.set_visible(true);
                 }
-
                 return initial_propagation;
             }
+
+            // Vi Navigation (HJKL)
             let flowbox_focus = flowbox.clone();
             let move_focus = move |direction: gtk4::DirectionType| {
                 if flowbox_focus.selected_children().is_empty() {
-                    if let Some(child) = flowbox_focus.child_at_index(0) {
-                        child.grab_focus();
-                        flowbox_focus.select_child(&child);
-                    }
+                    focus_first_visible(&flowbox_focus);
                 } else {
                     flowbox_focus.child_focus(direction);
                 }
             };
+
             match keyval {
                 gdk::Key::h => move_focus(gtk4::DirectionType::Left),
                 gdk::Key::j => move_focus(gtk4::DirectionType::Down),
@@ -211,6 +204,7 @@ fn setup_keyboard_controller(
                 gdk::Key::l => move_focus(gtk4::DirectionType::Right),
                 gdk::Key::slash => {
                     *is_searching = true;
+                    flowbox.unselect_all();
                     search_label.set_text("Search: ");
                     search_label.set_visible(true);
                     return glib::Propagation::Stop;
@@ -226,8 +220,6 @@ fn setup_keyboard_controller(
     window.add_controller(controller);
 }
 
-// --- The "Smart" Helper ---
-
 fn clear_search(query_state: &SearchState, flowbox: &FlowBox, label: &Label) {
     query_state.borrow_mut().clear();
     label.set_visible(false);
@@ -238,6 +230,21 @@ fn handle_selection(flowbox: &FlowBox) {
     if let Some(child) = flowbox.selected_children().first() {
         println!("{}", child.widget_name());
         std::process::exit(0);
+    }
+}
+
+fn focus_first_visible(flowbox: &FlowBox) {
+    let mut current = flowbox.first_child();
+    while let Some(widget) = current {
+        let next = widget.next_sibling();
+        if widget.is_visible() && widget.is_sensitive() {
+            if let Ok(child) = widget.downcast::<FlowBoxChild>() {
+                child.grab_focus();
+                flowbox.select_child(&child);
+                return;
+            }
+        }
+        current = next;
     }
 }
 
@@ -284,13 +291,13 @@ fn handle_search_input(
 
 // --- Async Pipeline ---
 
-fn spawn_image_loader(flowbox: FlowBox, dir_path: String) {
+fn spawn_image_loader(flowbox: FlowBox, dir_path: String, vi_mode: bool) {
     glib::spawn_future_local(async move {
         let (sender, receiver) = async_channel::bounded(10);
         thread::spawn(move || run_scan_and_decode(dir_path, sender));
         while let Ok(thumbnails) = receiver.recv().await {
             for (path, texture) in thumbnails {
-                add_thumbnail_to_ui(&flowbox, path, texture);
+                add_thumbnail_to_ui(&flowbox, path, texture, vi_mode);
             }
             glib::timeout_future(std::time::Duration::from_millis(1)).await;
         }
@@ -352,7 +359,7 @@ fn has_image_extension(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Texture) {
+fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Texture, vi_mode: bool) {
     let picture = Picture::for_paintable(&texture);
     picture.set_size_request(THUMB_SIZE, THUMB_SIZE);
     picture.set_can_shrink(true);
@@ -380,5 +387,10 @@ fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Texture) 
         frame.set_child(Some(&picture));
         child.set_child(Some(&frame));
         flowbox.insert(&child, -1);
+
+        if vi_mode && child.index() == 0 {
+            child.grab_focus();
+            flowbox.select_child(&child);
+        }
     }
 }
