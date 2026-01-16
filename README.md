@@ -104,10 +104,14 @@ Ready to go!
 
 ### Cargo
 
-Ensure you have GTK4 development libraries installed on your system (should be
-`gtk4`, `glib2`, `gdk-pixbuf2`, `cairo`, `pango`).
+```bash
+cargo install thumbpick
+```
 
 #### From Source
+
+Ensure you have GTK4 development libraries installed on your system (should be
+`gtk4`, `glib2`, `gdk-pixbuf2`, `cairo`, `pango`).
 
 ```bash
 git clone https://github.com/soliprem/thumbpick
