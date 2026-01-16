@@ -17,7 +17,7 @@ fn main() {
     let config = Config::parse();
     let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(move |app| {
-        build_ui(app, &config.dir_path, config.vi_mode.unwrap_or(false))
+        build_ui(app, &config.dir_path, config.vi_mode)
     });
     app.run_with_args(&Vec::<String>::new());
 }
