@@ -5,6 +5,23 @@ use gtk4::{
 };
 use std::path::PathBuf;
 
+fn open_file_platform(path: &str) -> std::io::Result<std::process::Child> {
+    #[cfg(target_os = "linux")]
+    return std::process::Command::new("xdg-open").arg(path).spawn();
+    
+    #[cfg(target_os = "macos")]
+    return std::process::Command::new("open").arg(path).spawn();
+    
+    #[cfg(target_os = "windows")]
+    return std::process::Command::new("cmd").args(&["/C", "start", path]).spawn();
+    
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Platform not supported"
+    ))
+}
+
 pub fn create_main_window(app: &Application) -> ApplicationWindow {
     ApplicationWindow::builder()
         .application(app)
@@ -62,9 +79,7 @@ pub fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Textu
 
         gesture.connect_pressed(move |_, n_press, _, _| {
             if n_press == 2 {
-                if let Err(e) = std::process::Command::new("xdg-open")
-                    .arg(&path_string)
-                    .spawn()
+                if let Err(e) = open_file_platform(&path_string)
                 {
                     eprintln!("Failed to open image: {}", e);
                 }

@@ -19,56 +19,94 @@
       fenix,
     }:
     let
-      system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
-      fenixLib = fenix.packages.${system};
-      rustToolchain = fenixLib.default.toolchain;
-
-      # GTK4 and dependencies
-      buildInputs = with pkgs; [
-        gtk4
-        glib
-        graphene
-        gdk-pixbuf
-        cairo
-        pango
-        harfbuzz
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
       ];
-
-      nativeBuildInputs = with pkgs; [
-        pkg-config
-        rustToolchain
-      ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
-      devShell.${system} = pkgs.mkShell {
-        inherit buildInputs nativeBuildInputs;
-      };
-
-      packages.${system}.default =
+      packages = forAllSystems (
+        system:
         let
-          unwrapped =
-            (naersk.lib.x86_64-linux.override {
-              cargo = rustToolchain;
-              rustc = rustToolchain;
-            }).buildPackage
-              {
-                pname = "thumbpick";
-                version = "0.1.1";
-                src = ./.;
+          pkgs = import nixpkgs { inherit system; };
+          fenixLib = fenix.packages.${system};
+          rustToolchain = fenixLib.default.toolchain;
 
-                inherit buildInputs nativeBuildInputs;
-              };
+          # GTK4 and dependencies
+          buildInputs = with pkgs; [
+            gtk4
+            glib
+            graphene
+            gdk-pixbuf
+            cairo
+            pango
+            harfbuzz
+          ];
+
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            rustToolchain
+          ];
         in
-        pkgs.runCommand "thumbpick"
-          {
-            nativeBuildInputs = [ pkgs.makeWrapper ];
-          }
-          ''
-            mkdir -p $out/bin
-            cp ${unwrapped}/bin/thumbpick $out/bin/
-            wrapProgram $out/bin/thumbpick \
-              --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
-          '';
+        {
+          default =
+            let
+              unwrapped =
+                (naersk.lib.${system}.override {
+                  cargo = rustToolchain;
+                  rustc = rustToolchain;
+                }).buildPackage
+                  {
+                    pname = "thumbpick";
+                    version = "0.1.1";
+                    src = ./.;
+
+                    inherit buildInputs nativeBuildInputs;
+                  };
+            in
+            pkgs.runCommand "thumbpick"
+              {
+                nativeBuildInputs = [ pkgs.makeWrapper ];
+              }
+              ''
+                mkdir -p $out/bin
+                cp ${unwrapped}/bin/thumbpick $out/bin/
+                wrapProgram $out/bin/thumbpick \
+                  --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
+              '';
+        }
+      );
+
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          fenixLib = fenix.packages.${system};
+          rustToolchain = fenixLib.default.toolchain;
+
+          buildInputs = with pkgs; [
+            gtk4
+            glib
+            graphene
+            gdk-pixbuf
+            cairo
+            pango
+            harfbuzz
+          ];
+
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            rustToolchain
+          ];
+        in
+        {
+          default = pkgs.mkShell {
+            inherit buildInputs nativeBuildInputs;
+          };
+        }
+      );
     };
 }
