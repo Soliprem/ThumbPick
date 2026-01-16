@@ -28,7 +28,7 @@ lacked one of these requirements, or also did a bunch more things I didn't need.
 ## Usage
 
 ```bash
-thumbpick <directory> [--vi | --vi-mode]
+thumbpick <directory> [-v | --vi-mode]
 ```
 
 **Example:** Pipe the selected image to `feh` or a wallpaper setter:
@@ -51,7 +51,7 @@ not currently searching.
 | **Double Click** | Open image immediately with `xdg-open`     |
 | **Enter**        | Print selected path to `stdout` and `exit` |
 
-**Vi Mode (`--vi | --vi-mode`)**
+**Vi Mode (`-v | --vi-mode`)**
 
 | Input             | Action                                                                        |
 | ----------------- | ----------------------------------------------------------------------------- |
@@ -61,6 +61,15 @@ not currently searching.
 | **Backspace**     | Remove last char / Exit search if empty                                       |
 | **Double Click**  | Open image immediately with `xdg-open`                                        |
 | **Enter**         | Print selected path to `stdout` and `exit` / Exit search mode, keeping filter |
+
+All options present in the config file (see below) can also be set with env vars. The env vars are derived as follows:
+`THUMBPICK_<option name in caps>`
+
+For nested options, use two underscores. Examples below.
+```
+THUMBPICK_KEYS__UP=t thumbpick
+THUMBPICK_THUMB_SIZE=150 thumbpick
+```
 
 ## Installation
 
@@ -74,7 +83,7 @@ environment.
 ```bash
 nix run github:soliprem/thumbpick <directory>
 # or
-nix run github:soliprem/thumbpick -- <directory> --vi
+nix run github:soliprem/thumbpick -- <directory> -v
 ```
 
 **Install:**
