@@ -84,8 +84,10 @@ Add the flake to your inputs
 ```nix
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-
-    thumbpick.url = "github:soliprem/thumbpick";
+    thumbpick = {
+          url = "github:soliprem/thumbpick";
+          inputs.nixpkgs.follows = "nixpkgs";
+      };
   ...
   };
 ```
