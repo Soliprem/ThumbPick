@@ -2,6 +2,13 @@
 name = "thumbpick"
 version = "0.1.0"
 edition = "2021"
+license = "GPLv3"
+description = "lightweight, scriptable, keyboard-centric image picker"
+repository = "https://github.com/soliprem/thumbpick"
+homepage = "https://github.com/soliprem/thumbpick"
+readme = "README.md"
+categories = ["tools", "image-pickers"]
+keywords = ["thumbnail", "images"]
 
 [dependencies]
 gtk4 = "0.10"
