@@ -2,8 +2,7 @@ use async_channel::Sender;
 use gdk_pixbuf::Pixbuf;
 use gtk4::{
     gdk, glib, prelude::*, Application, ApplicationWindow, EventControllerKey, FlowBox,
-    FlowBoxChild, GestureClick, Label, Overlay, Picture, PropagationPhase,
-    ScrolledWindow,
+    FlowBoxChild, GestureClick, Label, Overlay, Picture, PropagationPhase, ScrolledWindow,
 };
 use rayon::prelude::*;
 use std::cell::RefCell;
@@ -137,42 +136,62 @@ fn setup_keyboard_controller(
 
     controller.connect_key_pressed(move |_, keyval, _, _| {
         let mut is_searching = search_mode_active.borrow_mut();
-        if keyval == gdk::Key::Return || keyval == gdk::Key::KP_Enter {
-            handle_selection(&flowbox);
-            return glib::Propagation::Stop;
-        }
-        if keyval == gdk::Key::Escape && !*is_searching {
-            std::process::exit(0);
-        }
+
+        if !*is_searching {
+            match keyval {
+                gdk::Key::Return | gdk::Key::KP_Enter => {
+                    handle_selection(&flowbox);
+                    return glib::Propagation::Stop;
+                }
+                gdk::Key::Escape => {
+                    std::process::exit(0);
+                }
+                _ => {}
+            };
+        };
+
         if vi_mode {
             if *is_searching {
-                if keyval == gdk::Key::Escape {
-                    *is_searching = false;
-                    clear_search(&query_state, &flowbox, &search_label);
-                    return glib::Propagation::Stop;
-                }
-                let was_empty = query_state.borrow().is_empty();
-                let propagation =
-                    handle_search_input(keyval, &query_state, &flowbox, &search_label);
-                if was_empty && keyval == gdk::Key::BackSpace {
-                    *is_searching = false;
-                    clear_search(&query_state, &flowbox, &search_label);
-                    if !flowbox
-                        .selected_children()
-                        .first()
-                        .is_some_and(|c| c.grab_focus())
-                    {
-                        flowbox.grab_focus();
+                match keyval {
+                    gdk::Key::Escape => {
+                        *is_searching = false;
+                        clear_search(&query_state, &flowbox, &search_label);
+                        return glib::Propagation::Stop;
                     }
-                    return glib::Propagation::Stop;
-                }
+                    gdk::Key::Return => {
+                        *is_searching = false;
+                        let flowbox_foc = flowbox.clone();
+                        if let Some(child) = flowbox_foc.child_at_index(0) {
+                            child.grab_focus();
+                            flowbox_foc.select_child(&child);
+                        }
+                        return glib::Propagation::Stop;
+                    }
+                    gdk::Key::BackSpace => {
+                        if query_state.borrow().is_empty() {
+                            *is_searching = false;
+                            clear_search(&query_state, &flowbox, &search_label);
+                            if !flowbox
+                                .selected_children()
+                                .first()
+                                .is_some_and(|c| c.grab_focus())
+                            {
+                                flowbox.grab_focus();
+                            }
+                            return glib::Propagation::Stop;
+                        }
+                    }
+                    _ => {}
+                };
 
+                let initial_propagation =
+                    handle_search_input(keyval, &query_state, &flowbox, &search_label);
                 if *is_searching && query_state.borrow().is_empty() {
                     search_label.set_text("Search: ");
                     search_label.set_visible(true);
                 }
 
-                return propagation;
+                return initial_propagation;
             }
             let flowbox_focus = flowbox.clone();
             let move_focus = move |direction: gtk4::DirectionType| {
