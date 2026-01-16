@@ -1,7 +1,7 @@
 use async_channel::Sender;
 use gdk_pixbuf::Pixbuf;
 use gtk4::{
-    gdk, glib, prelude::*, Application, ApplicationWindow, EventControllerKey, FlowBox,
+    gdk, glib, graphene, prelude::*, Application, ApplicationWindow, EventControllerKey, FlowBox,
     FlowBoxChild, GestureClick, Label, Overlay, Picture, PropagationPhase, ScrolledWindow,
 };
 use rayon::prelude::*;
@@ -133,6 +133,7 @@ fn setup_keyboard_controller(
     controller.set_propagation_phase(PropagationPhase::Capture);
     let flowbox = flowbox.clone();
     let search_mode_active = Rc::new(RefCell::new(false));
+    let awaiting_g = Rc::new(RefCell::new(false));
 
     controller.connect_key_pressed(move |_, keyval, _, _| {
         let mut is_searching = search_mode_active.borrow_mut();
@@ -187,7 +188,22 @@ fn setup_keyboard_controller(
                 return initial_propagation;
             }
 
-            // Vi Navigation (HJKL)
+            // Vi Navigation
+            if keyval == gdk::Key::g {
+                let mut g_layer = awaiting_g.borrow_mut();
+                if *g_layer {
+                    focus_first_visible(&flowbox);
+                    *g_layer = false;
+                } else {
+                    *g_layer = true;
+                }
+                return glib::Propagation::Stop;
+            }
+
+            if *awaiting_g.borrow() {
+                *awaiting_g.borrow_mut() = false;
+            }
+
             let flowbox_focus = flowbox.clone();
             let move_focus = move |direction: gtk4::DirectionType| {
                 if flowbox_focus.selected_children().is_empty() {
@@ -209,6 +225,15 @@ fn setup_keyboard_controller(
                         search_label.set_text("Search: ");
                     };
                     search_label.set_visible(true);
+                    return glib::Propagation::Stop;
+                }
+                gdk::Key::G => focus_last_visible(&flowbox),
+                gdk::Key::asciicircum /*i.e.: `^`*/ | gdk::Key::caret => {
+                    focus_line_extremity(&flowbox, true);
+                    return glib::Propagation::Stop;
+                }
+                gdk::Key::dollar => {
+                    focus_line_extremity(&flowbox, false);
                     return glib::Propagation::Stop;
                 }
                 _ => return glib::Propagation::Proceed,
@@ -248,6 +273,63 @@ fn focus_first_visible(flowbox: &FlowBox) {
         }
         current = next;
     }
+}
+
+fn focus_last_visible(flowbox: &FlowBox) {
+    let mut current = flowbox.last_child();
+    while let Some(widget) = current {
+        let next = widget.prev_sibling();
+        if widget.is_visible() && widget.is_sensitive() && widget.is_child_visible() {
+            if let Ok(child) = widget.downcast::<FlowBoxChild>() {
+                child.grab_focus();
+                flowbox.select_child(&child);
+                return;
+            }
+        }
+        current = next;
+    }
+}
+
+fn focus_line_extremity(flowbox: &FlowBox, start: bool) {
+    let current_selection = flowbox.selected_children();
+    let current_child = match current_selection.first() {
+        Some(w) => w,
+        None => return,
+    };
+    let current_bounds = current_child
+        .compute_bounds(flowbox)
+        .expect("Widget not in flowbox?");
+    let target_y = current_bounds.y();
+    let mut candidate = current_child.clone();
+    loop {
+        let next_step = if start {
+            candidate.prev_sibling()
+        } else {
+            candidate.next_sibling()
+        };
+
+        match next_step {
+            Some(widget) => {
+                if !widget.is_visible() || !widget.is_sensitive() || !widget.is_child_visible() {
+                    candidate = widget.downcast::<FlowBoxChild>().unwrap_or(candidate);
+                    continue;
+                }
+                if let Some(bounds) = widget.compute_bounds(flowbox) {
+                    if (bounds.y() - target_y).abs() > 1.0 {
+                        break;
+                    }
+                }
+                if let Ok(child) = widget.downcast::<FlowBoxChild>() {
+                    candidate = child;
+                }
+            }
+            None => break,
+        }
+    }
+
+    // 5. Apply focus/selection to the winner
+    candidate.grab_focus();
+    flowbox.select_child(&candidate);
 }
 
 // --- Input Handler with UI Feedback ---
