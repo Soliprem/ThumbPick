@@ -1,9 +1,70 @@
-use gtk4::{glib, prelude::*, ApplicationWindow, EventControllerKey, FlowBox, Label, gdk, PropagationPhase};
+use gtk4::{
+    gdk, glib, prelude::*, ApplicationWindow, EventControllerKey, FlowBox, Label, PropagationPhase,
+};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+
+use crate::config::Config;
 use crate::focus_jumpers::{focus_first_visible, focus_last_visible, focus_line_extremity};
 
 pub(crate) type SearchState = Rc<RefCell<String>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Action {
+    Left,
+    Down,
+    Up,
+    Right,
+    Search,
+    Quit,
+    Select,
+    GoTop,
+    GoBottom,
+    LineStart,
+    LineEnd,
+    None,
+}
+
+struct KeyResolver {
+    map: HashMap<gdk::Key, Action>,
+}
+
+impl KeyResolver {
+    fn new() -> Self {
+        let keys = &Config::global().keys;
+        let mut map = HashMap::new();
+
+        // Helper to bind a config string to an action
+        let mut bind = |name: &str, action: Action| {
+            if let Some(key) = gdk::Key::from_name(name) {
+                map.insert(key, action);
+            }
+        };
+
+        // Bind from Config
+        bind(&keys.left, Action::Left);
+        bind(&keys.down, Action::Down);
+        bind(&keys.up, Action::Up);
+        bind(&keys.right, Action::Right);
+        bind(&keys.search, Action::Search);
+        bind(&keys.quit, Action::Quit);
+        bind(&keys.select, Action::Select);
+        bind(&keys.go_top, Action::GoTop);
+        bind(&keys.go_bottom, Action::GoBottom);
+        bind(&keys.line_start, Action::LineStart);
+        bind(&keys.line_end, Action::LineEnd);
+
+        // Hardcode secondary defaults if desired (e.g. Numpad Enter always works)
+        map.insert(gdk::Key::KP_Enter, Action::Select);
+
+        Self { map }
+    }
+
+    fn resolve(&self, keyval: gdk::Key) -> Action {
+        self.map.get(&keyval).copied().unwrap_or(Action::None)
+    }
+}
 
 pub fn setup_filter_func(flowbox: &FlowBox, query_state: SearchState) {
     flowbox.set_filter_func(move |child| {
@@ -32,37 +93,41 @@ pub fn setup_keyboard_controller(
     let search_mode_active = Rc::new(RefCell::new(false));
     let awaiting_g = Rc::new(RefCell::new(false));
 
+    let resolver = KeyResolver::new();
+
     controller.connect_key_pressed(move |_, keyval, _, _| {
         let mut is_searching = search_mode_active.borrow_mut();
 
+        let action = resolver.resolve(keyval);
+
         if !*is_searching {
-            match keyval {
-                gdk::Key::Return | gdk::Key::KP_Enter => {
+            match action {
+                Action::Select => {
                     handle_selection(&flowbox);
                     return glib::Propagation::Stop;
                 }
-                gdk::Key::Escape => std::process::exit(0),
+                Action::Quit => std::process::exit(0),
                 _ => {}
-            };
+            }
         };
 
         if vi_mode {
             if *is_searching {
-                match keyval {
-                    gdk::Key::Escape => {
+                match action {
+                    Action::Quit => {
                         *is_searching = false;
                         clear_search(&query_state, &flowbox, &search_label);
                         focus_first_visible(&flowbox);
                         return glib::Propagation::Stop;
                     }
-                    gdk::Key::Return => {
+                    Action::Select => {
                         *is_searching = false;
                         focus_first_visible(&flowbox);
                         search_label.set_visible(false);
                         return glib::Propagation::Stop;
                     }
-                    gdk::Key::BackSpace => {
-                        if query_state.borrow().is_empty() {
+                    _ => {
+                        if keyval == gdk::Key::BackSpace && query_state.borrow().is_empty() {
                             *is_searching = false;
                             clear_search(&query_state, &flowbox, &search_label);
                             if flowbox.selected_children().is_empty() {
@@ -71,10 +136,8 @@ pub fn setup_keyboard_controller(
                             return glib::Propagation::Stop;
                         }
                     }
-                    _ => {}
-                };
+                }
 
-                // Search Input Processing
                 let initial_propagation =
                     handle_search_input(keyval, &query_state, &flowbox, &search_label);
 
@@ -85,8 +148,10 @@ pub fn setup_keyboard_controller(
                 return initial_propagation;
             }
 
-            // Vi Navigation
-            if keyval == gdk::Key::g {
+            // --- Navigation Mode ---
+
+            // Handle double-press logic (gg)
+            if action == Action::GoTop {
                 let mut g_layer = awaiting_g.borrow_mut();
                 if *g_layer {
                     focus_first_visible(&flowbox);
@@ -96,7 +161,6 @@ pub fn setup_keyboard_controller(
                 }
                 return glib::Propagation::Stop;
             }
-
             if *awaiting_g.borrow() {
                 *awaiting_g.borrow_mut() = false;
             }
@@ -110,29 +174,23 @@ pub fn setup_keyboard_controller(
                 }
             };
 
-            match keyval {
-                gdk::Key::h => move_focus(gtk4::DirectionType::Left),
-                gdk::Key::j => move_focus(gtk4::DirectionType::Down),
-                gdk::Key::k => move_focus(gtk4::DirectionType::Up),
-                gdk::Key::l => move_focus(gtk4::DirectionType::Right),
-                gdk::Key::slash => {
+            // Main Action Matcher
+            match action {
+                Action::Left => move_focus(gtk4::DirectionType::Left),
+                Action::Down => move_focus(gtk4::DirectionType::Down),
+                Action::Up => move_focus(gtk4::DirectionType::Up),
+                Action::Right => move_focus(gtk4::DirectionType::Right),
+                Action::Search => {
                     *is_searching = true;
                     flowbox.unselect_all();
                     if query_state.borrow().is_empty() {
                         search_label.set_text("Search: ");
                     };
                     search_label.set_visible(true);
-                    return glib::Propagation::Stop;
                 }
-                gdk::Key::G => focus_last_visible(&flowbox),
-                gdk::Key::asciicircum /*i.e.: `^`*/ | gdk::Key::caret => {
-                    focus_line_extremity(&flowbox, true);
-                    return glib::Propagation::Stop;
-                }
-                gdk::Key::dollar => {
-                    focus_line_extremity(&flowbox, false);
-                    return glib::Propagation::Stop;
-                }
+                Action::GoBottom => focus_last_visible(&flowbox),
+                Action::LineStart => focus_line_extremity(&flowbox, true),
+                Action::LineEnd => focus_line_extremity(&flowbox, false),
                 _ => return glib::Propagation::Proceed,
             }
             return glib::Propagation::Stop;
@@ -157,7 +215,6 @@ fn handle_selection(flowbox: &FlowBox) {
     }
 }
 
-
 // --- Input Handler with UI Feedback ---
 fn handle_search_input(
     keyval: gdk::Key,
@@ -176,7 +233,7 @@ fn handle_search_input(
             query.clear();
             updated = true;
         } else if let Some(c) = keyval.to_unicode() {
-            if c.is_alphanumeric() || matches!(c, '-' | '_' | '.') {
+            if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ') {
                 query.push(c);
                 updated = true;
             }

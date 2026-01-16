@@ -28,7 +28,7 @@ lacked one of these requirements, or also did a bunch more things I didn't need.
 ## Usage
 
 ```bash
-thumbpick <directory> [--vi | --vi-mode]
+thumbpick <directory> [-v | --vi-mode]
 ```
 
 **Example:** Pipe the selected image to `feh` or a wallpaper setter:
@@ -51,7 +51,7 @@ not currently searching.
 | **Double Click** | Open image immediately with `xdg-open`     |
 | **Enter**        | Print selected path to `stdout` and `exit` |
 
-**Vi Mode (`--vi | --vi-mode`)**
+**Vi Mode (`-v | --vi-mode`)**
 
 | Input             | Action                                                                        |
 | ----------------- | ----------------------------------------------------------------------------- |
@@ -61,6 +61,15 @@ not currently searching.
 | **Backspace**     | Remove last char / Exit search if empty                                       |
 | **Double Click**  | Open image immediately with `xdg-open`                                        |
 | **Enter**         | Print selected path to `stdout` and `exit` / Exit search mode, keeping filter |
+
+All options present in the config file (see below) can also be set with env vars. The env vars are derived as follows:
+`THUMBPICK_<option name in caps>`
+
+For nested options, use two underscores. Examples below.
+```
+THUMBPICK_KEYS__UP=t thumbpick
+THUMBPICK_THUMB_SIZE=150 thumbpick
+```
 
 ## Installation
 
@@ -74,7 +83,7 @@ environment.
 ```bash
 nix run github:soliprem/thumbpick <directory>
 # or
-nix run github:soliprem/thumbpick -- <directory> --vi
+nix run github:soliprem/thumbpick -- <directory> -v
 ```
 
 **Install:**
@@ -82,14 +91,14 @@ nix run github:soliprem/thumbpick -- <directory> --vi
 Add the flake to your inputs
 
 ```nix
-  inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    thumbpick = {
-          url = "github:soliprem/thumbpick";
-          inputs.nixpkgs.follows = "nixpkgs";
-      };
-  ...
-  };
+inputs = {
+  nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+  thumbpick = {
+        url = "github:soliprem/thumbpick";
+        inputs.nixpkgs.follows = "nixpkgs";
+    };
+...
+};
 ```
 
 And the package
@@ -126,6 +135,70 @@ Or run directly without installing:
 ```bash
 cargo run --release -- <directory>
 ```
+
+## Configuration
+
+Thumbpick looks for a configuration file at `~/.config/thumbpick/config.toml`.
+
+Below is the default configuration. You can copy this to your config file to
+override specific values.
+
+`dir_path` supports shell expansion, so you can use `~` (e.g., `~/Pictures`) or
+environment variables (e.g., `$XDG_DATA_HOME/wallpapers`).
+
+```toml
+# Default: false. Set to true to enable Vim-style navigation and behavior.
+vi_mode = false
+
+# Start directory. Defaults to current directory if not set.
+dir_path = "." 
+
+# Thumbnail size in pixels.
+thumb_size = 200
+
+[keys]
+# Navigation
+up = "k"
+left = "h"
+down = "j"
+right = "l"
+
+# Actions
+quit = "Escape"
+search = "slash"    # "/" key
+select = "Return"   # Enter key
+
+# Jumping
+go_top = "g"        # Press 'g' twice in vi_mode
+go_bottom = "G"     # Shift+g
+line_start = "asciicircum" # "^" key
+line_end = "dollar"        # "$" key
+```
+
+### Keys
+
+Key names use the standard GDK key names. This means they are case sensitive.
+Common control keys have specific capitalized names, like `Escape` `Return`
+`Tab` ...
+
+You can find a
+[list of key names here](https://github.com/GNOME/gtk/blob/main/gdk/keynames.txt).
+You can find out a key's keyname by using programs like `wev`. This is an
+example of wev's output, typing the `Enter` key.
+
+```bash
+wev
+...
+[        11:    xdg_toplevel] configure: width: 1256; height: 1408
+                      tiled-left tiled-right tiled-top tiled-bottom activated
+[        10:     xdg_surface] configure: serial: 2888898
+[        16:     wl_keyboard] key: serial: 2888899; time: 39294524; key: 36; state: 1 (pressed)
+                      sym: Return       (65293), utf8: '\r'
+[        16:     wl_keyboard] key: serial: 2888900; time: 39294582; key: 36; state: 0 (released)
+                      sym: Return       (65293), utf8: ''
+```
+
+Notice the `sym: Return`. This generally works for me.
 
 ## License
 

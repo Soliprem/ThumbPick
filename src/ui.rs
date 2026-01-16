@@ -1,10 +1,26 @@
-use std::path::PathBuf;
+use crate::config::Config;
 use gtk4::{
-    gdk, prelude::*, Application, ApplicationWindow, FlowBox,
-    FlowBoxChild, GestureClick, Label, Overlay, Picture, ScrolledWindow,
+    gdk, prelude::*, Application, ApplicationWindow, FlowBox, FlowBoxChild, GestureClick, Label,
+    Overlay, Picture, ScrolledWindow,
 };
+use std::path::PathBuf;
 
-pub const THUMB_SIZE: i32 = 200;
+fn open_file_platform(path: &str) -> std::io::Result<std::process::Child> {
+    #[cfg(target_os = "linux")]
+    return std::process::Command::new("xdg-open").arg(path).spawn();
+    
+    #[cfg(target_os = "macos")]
+    return std::process::Command::new("open").arg(path).spawn();
+    
+    #[cfg(target_os = "windows")]
+    return std::process::Command::new("cmd").args(&["/C", "start", path]).spawn();
+    
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Platform not supported"
+    ))
+}
 
 pub fn create_main_window(app: &Application) -> ApplicationWindow {
     ApplicationWindow::builder()
@@ -40,7 +56,6 @@ pub fn create_search_overlay(child: &impl IsA<gtk4::Widget>) -> (Overlay, Label)
     overlay.set_child(Some(child));
 
     let label = Label::new(None);
-    label.add_css_class("app-notification");
     label.set_halign(gtk4::Align::Center);
     label.set_valign(gtk4::Align::End);
     label.set_margin_bottom(30);
@@ -52,7 +67,7 @@ pub fn create_search_overlay(child: &impl IsA<gtk4::Widget>) -> (Overlay, Label)
 
 pub fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Texture, vi_mode: bool) {
     let picture = Picture::for_paintable(&texture);
-    picture.set_size_request(THUMB_SIZE, THUMB_SIZE);
+    picture.set_size_request(Config::global().thumb_size, Config::global().thumb_size);
     picture.set_can_shrink(true);
     picture.set_keep_aspect_ratio(true);
 
@@ -64,9 +79,7 @@ pub fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Textu
 
         gesture.connect_pressed(move |_, n_press, _, _| {
             if n_press == 2 {
-                if let Err(e) = std::process::Command::new("xdg-open")
-                    .arg(&path_string)
-                    .spawn()
+                if let Err(e) = open_file_platform(&path_string)
                 {
                     eprintln!("Failed to open image: {}", e);
                 }
@@ -85,4 +98,3 @@ pub fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Textu
         }
     }
 }
-
