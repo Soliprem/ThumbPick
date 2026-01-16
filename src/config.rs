@@ -95,10 +95,7 @@ impl Config {
         builder = builder.merge(Serialized::defaults(Config::default()));
 
         if let Some(path) = config_path {
-            println!("Looking for config at: {:?}", path);
-            if path.exists() {
-                builder = builder.merge(Toml::file(path));
-            }
+            builder = builder.merge(Toml::file(path));
         }
 
         builder = builder.merge(Env::prefixed("THUMBPICK_"));
