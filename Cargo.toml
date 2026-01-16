@@ -17,3 +17,7 @@ async-channel = "2.5.0"
 walkdir = "2.5.0"
 glib = "0.21.5"
 rayon = "1.11.0"
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "4.4", features = ["derive", "env"] }
+figment = { version = "0.10", features = ["toml", "env"] }
+directories = "6.0"

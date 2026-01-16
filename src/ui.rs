@@ -1,10 +1,9 @@
-use std::path::PathBuf;
+use crate::config::Config;
 use gtk4::{
-    gdk, prelude::*, Application, ApplicationWindow, FlowBox,
-    FlowBoxChild, GestureClick, Label, Overlay, Picture, ScrolledWindow,
+    gdk, prelude::*, Application, ApplicationWindow, FlowBox, FlowBoxChild, GestureClick, Label,
+    Overlay, Picture, ScrolledWindow,
 };
-
-pub const THUMB_SIZE: i32 = 200;
+use std::path::PathBuf;
 
 pub fn create_main_window(app: &Application) -> ApplicationWindow {
     ApplicationWindow::builder()
@@ -52,7 +51,7 @@ pub fn create_search_overlay(child: &impl IsA<gtk4::Widget>) -> (Overlay, Label)
 
 pub fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Texture, vi_mode: bool) {
     let picture = Picture::for_paintable(&texture);
-    picture.set_size_request(THUMB_SIZE, THUMB_SIZE);
+    picture.set_size_request(Config::global().thumb_size, Config::global().thumb_size);
     picture.set_can_shrink(true);
     picture.set_keep_aspect_ratio(true);
 
@@ -85,4 +84,3 @@ pub fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Textu
         }
     }
 }
-
