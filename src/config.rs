@@ -107,10 +107,17 @@ impl Config {
 
         builder = builder.merge(Serialized::defaults(&args));
 
-        let config: Config = builder.extract().unwrap_or_else(|e| {
+        let mut config: Config = builder.extract().unwrap_or_else(|e| {
             eprintln!("Failed to load configuration: {}", e);
             std::process::exit(1);
         });
+
+        if let Ok(expanded) = shellexpand::full(&config.dir_path) {
+            config.dir_path = expanded.to_string();
+        } else {
+             // Optional: Handle error if a variable is missing (e.g. $INVALID_VAR)
+             eprintln!("Warning: Could not expand environment variables in path: {}", config.dir_path);
+        }
 
         CONFIG.set(config).ok();
         CONFIG.get().unwrap()
