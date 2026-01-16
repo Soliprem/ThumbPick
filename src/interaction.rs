@@ -233,7 +233,7 @@ fn handle_search_input(
             query.clear();
             updated = true;
         } else if let Some(c) = keyval.to_unicode() {
-            if c.is_alphanumeric() || matches!(c, '-' | '_' | '.') {
+            if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ') {
                 query.push(c);
                 updated = true;
             }
