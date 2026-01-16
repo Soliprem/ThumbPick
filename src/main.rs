@@ -389,46 +389,58 @@ fn spawn_image_loader(flowbox: FlowBox, dir_path: String, vi_mode: bool) {
 }
 
 fn run_scan_and_decode(dir_path: String, sender: Sender<Vec<(PathBuf, gdk::Texture)>>) {
-    let paths = get_file_list(&dir_path);
-    for chunk in paths.chunks(BATCH_SIZE) {
-        let thumbnails: Vec<_> = chunk
-            .par_iter()
-            .filter_map(|path| {
-                let pixbuf = Pixbuf::from_file_at_scale(path, THUMB_SIZE, THUMB_SIZE, true)
-                    .or_else(|_| {
-                        // Fallback: load full size and scale with aspect ratio preserved
-                        // NOTE: necessary because gifs often break with from_file_at_scale
-                        let full = Pixbuf::from_file(path)?;
-                        let width = full.width();
-                        let height = full.height();
-                        let scale = (THUMB_SIZE as f64 / width.max(height) as f64).min(1.0);
-                        let new_width = (width as f64 * scale) as i32;
-                        let new_height = (height as f64 * scale) as i32;
-                        full.scale_simple(new_width, new_height, gdk_pixbuf::InterpType::Bilinear)
-                            .ok_or_else(|| {
-                                glib::Error::new(glib::FileError::Failed, "Scale failed")
-                            })
-                    })
-                    .ok()?;
-                let texture = gdk::Texture::for_pixbuf(&pixbuf);
-                Some((path.clone(), texture))
-            })
-            .collect();
-        if sender.send_blocking(thumbnails).is_err() {
-            break;
+    let walker = WalkDir::new(dir_path).into_iter();
+
+    let mut buffer = Vec::with_capacity(BATCH_SIZE);
+
+    for entry in walker.filter_entry(|e| e.file_name().to_str() != Some(".git")) {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let path = entry.into_path();
+
+        if path.is_file() && has_image_extension(&path) {
+            buffer.push(path);
+
+            if buffer.len() >= BATCH_SIZE {
+                let chunk = std::mem::take(&mut buffer);
+
+                process_and_send_chunk(chunk, &sender);
+            }
         }
+    }
+
+    if !buffer.is_empty() {
+        process_and_send_chunk(buffer, &sender);
     }
 }
 
-fn get_file_list(dir_path: &str) -> Vec<PathBuf> {
-    WalkDir::new(dir_path)
-        .into_iter()
-        .filter_entry(|e| e.file_name().to_str() != Some(".git"))
-        .flatten()
-        .map(|e| e.into_path())
-        .filter(|p| p.is_file())
-        .filter(|p| has_image_extension(p))
-        .collect()
+fn process_and_send_chunk(chunk: Vec<PathBuf>, sender: &Sender<Vec<(PathBuf, gdk::Texture)>>) {
+    let thumbnails: Vec<_> = chunk
+        .par_iter()
+        .filter_map(|path| {
+            let pixbuf = Pixbuf::from_file_at_scale(path, THUMB_SIZE, THUMB_SIZE, true)
+                .or_else(|_| {
+                    // Fallback: load full size and scale with aspect ratio preserved
+                    // NOTE: necessary because gifs often break with from_file_at_scale
+                    let full = Pixbuf::from_file(path)?;
+                    let width = full.width();
+                    let height = full.height();
+                    let scale = (THUMB_SIZE as f64 / width.max(height) as f64).min(1.0);
+                    let new_width = (width as f64 * scale) as i32;
+                    let new_height = (height as f64 * scale) as i32;
+                    full.scale_simple(new_width, new_height, gdk_pixbuf::InterpType::Bilinear)
+                        .ok_or_else(|| glib::Error::new(glib::FileError::Failed, "Scale failed"))
+                })
+                .ok()?;
+            let texture = gdk::Texture::for_pixbuf(&pixbuf);
+            Some((path.clone(), texture))
+        })
+        .collect();
+
+    let _ = sender.send_blocking(thumbnails);
 }
 
 fn has_image_extension(path: &Path) -> bool {
