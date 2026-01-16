@@ -154,13 +154,13 @@ fn setup_keyboard_controller(
                     gdk::Key::Escape => {
                         *is_searching = false;
                         clear_search(&query_state, &flowbox, &search_label);
+                        focus_first_visible(&flowbox);
                         return glib::Propagation::Stop;
                     }
                     gdk::Key::Return => {
                         *is_searching = false;
                         focus_first_visible(&flowbox);
-                        // NOTE: this is very unelegant and a bit clunky
-                        flowbox.child_focus(gtk4::DirectionType::Right);
+                        search_label.set_visible(false);
                         return glib::Propagation::Stop;
                     }
                     gdk::Key::BackSpace => {
@@ -205,7 +205,9 @@ fn setup_keyboard_controller(
                 gdk::Key::slash => {
                     *is_searching = true;
                     flowbox.unselect_all();
-                    search_label.set_text("Search: ");
+                    if query_state.borrow().is_empty() {
+                        search_label.set_text("Search: ");
+                    };
                     search_label.set_visible(true);
                     return glib::Propagation::Stop;
                 }
@@ -237,7 +239,7 @@ fn focus_first_visible(flowbox: &FlowBox) {
     let mut current = flowbox.first_child();
     while let Some(widget) = current {
         let next = widget.next_sibling();
-        if widget.is_visible() && widget.is_sensitive() {
+        if widget.is_visible() && widget.is_sensitive() && widget.is_child_visible() {
             if let Ok(child) = widget.downcast::<FlowBoxChild>() {
                 child.grab_focus();
                 flowbox.select_child(&child);
