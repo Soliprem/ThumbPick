@@ -39,7 +39,6 @@ pub fn create_search_overlay(child: &impl IsA<gtk4::Widget>) -> (Overlay, Label)
     overlay.set_child(Some(child));
 
     let label = Label::new(None);
-    label.add_css_class("app-notification");
     label.set_halign(gtk4::Align::Center);
     label.set_valign(gtk4::Align::End);
     label.set_margin_bottom(30);
