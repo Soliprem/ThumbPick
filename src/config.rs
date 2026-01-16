@@ -11,7 +11,7 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
 
 #[derive(Debug, Parser, Serialize)]
 struct CliArgs {
-    #[arg(long, short = 'v', action = ArgAction::SetTrue)]
+    #[arg(long, short = 'v', action = ArgAction::Set, num_args = 0..=1, default_missing_value = "true")]
     #[serde(skip_serializing_if = "Option::is_none")]
     vi_mode: Option<bool>,
 
@@ -82,15 +82,7 @@ impl Config {
         let config_path = ProjectDirs::from("eu", "soliprem", app_name)
             .map(|dirs| dirs.config_dir().join("config.toml"));
 
-        // Parse args into a mutable variable so we can mutate vi_mode later
-        let mut args = CliArgs::parse();
-
-        // If vi_mode is Some(false), it means the flag was missing (default).
-        // Set it to None so Serde skips it and Figment uses the TOML value.
-        // This assumes you only use the flag to ENABLE vi_mode, not disable it.
-        if args.vi_mode == Some(false) {
-            args.vi_mode = None;
-        }
+        let args = CliArgs::parse();
 
         let mut builder = Figment::new();
 
@@ -115,8 +107,11 @@ impl Config {
         if let Ok(expanded) = shellexpand::full(&config.dir_path) {
             config.dir_path = expanded.to_string();
         } else {
-             // Optional: Handle error if a variable is missing (e.g. $INVALID_VAR)
-             eprintln!("Warning: Could not expand environment variables in path: {}", config.dir_path);
+            // Optional: Handle error if a variable is missing (e.g. $INVALID_VAR)
+            eprintln!(
+                "Warning: Could not expand environment variables in path: {}",
+                config.dir_path
+            );
         }
 
         CONFIG.set(config).ok();
