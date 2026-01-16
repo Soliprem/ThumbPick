@@ -7,7 +7,7 @@ description = "lightweight, scriptable, keyboard-centric image picker"
 repository = "https://github.com/soliprem/thumbpick"
 homepage = "https://github.com/soliprem/thumbpick"
 readme = "README.md"
-categories = ["tools", "image-pickers"]
+categories = ["multimedia::images"]
 keywords = ["thumbnail", "images"]
 
 [dependencies]
