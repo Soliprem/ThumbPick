@@ -8,6 +8,7 @@ use rayon::prelude::*;
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::mpsc;
 use std::thread;
 use walkdir::WalkDir;
 
@@ -389,31 +390,34 @@ fn spawn_image_loader(flowbox: FlowBox, dir_path: String, vi_mode: bool) {
 }
 
 fn run_scan_and_decode(dir_path: String, sender: Sender<Vec<(PathBuf, gdk::Texture)>>) {
-    let walker = WalkDir::new(dir_path).into_iter();
-
-    let mut buffer = Vec::with_capacity(BATCH_SIZE);
-
-    for entry in walker.filter_entry(|e| e.file_name().to_str() != Some(".git")) {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        let path = entry.into_path();
-
-        if path.is_file() && has_image_extension(&path) {
-            buffer.push(path);
-
-            if buffer.len() >= BATCH_SIZE {
-                let chunk = std::mem::take(&mut buffer);
-
-                process_and_send_chunk(chunk, &sender);
+    let (path_tx, path_rx) = mpsc::sync_channel::<PathBuf>(1024);
+    std::thread::spawn(move || {
+        let walker = WalkDir::new(dir_path).into_iter();
+        for entry in walker
+            .filter_entry(|e| e.file_name().to_str() != Some(".git"))
+            .flatten()
+        {
+            let path = entry.into_path();
+            if path.is_file() && has_image_extension(&path) {
+                // If receiver hangs up, stop scanning
+                if path_tx.send(path).is_err() {
+                    return;
+                }
             }
         }
-    }
+    });
+    let mut batch = Vec::with_capacity(BATCH_SIZE);
 
-    if !buffer.is_empty() {
-        process_and_send_chunk(buffer, &sender);
+    while let Ok(path) = path_rx.recv() {
+        batch.push(path);
+
+        if batch.len() >= BATCH_SIZE {
+            let chunk = std::mem::take(&mut batch);
+            process_and_send_chunk(chunk, &sender);
+        }
+    }
+    if !batch.is_empty() {
+        process_and_send_chunk(batch, &sender);
     }
 }
 
