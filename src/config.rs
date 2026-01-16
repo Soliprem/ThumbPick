@@ -10,6 +10,11 @@ use std::sync::OnceLock;
 static CONFIG: OnceLock<Config> = OnceLock::new();
 
 #[derive(Debug, Parser, Serialize)]
+#[command(
+    version,
+    about = "Lightweight, scriptable, keyboard-centric image picker",
+    author = "soliprem me@soliprem.eu"
+)]
 struct CliArgs {
     #[arg(long, short = 'v', action = ArgAction::Set, num_args = 0..=1, default_missing_value = "true")]
     #[serde(skip_serializing_if = "Option::is_none")]
