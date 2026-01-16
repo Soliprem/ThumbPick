@@ -113,11 +113,20 @@ impl Config {
         if let Ok(expanded) = shellexpand::full(&config.dir_path) {
             config.dir_path = expanded.to_string();
         } else {
-            // Optional: Handle error if a variable is missing (e.g. $INVALID_VAR)
+            // Handle error if a variable is missing (e.g. $INVALID_VAR)
             eprintln!(
                 "Warning: Could not expand environment variables in path: {}",
                 config.dir_path
             );
+        }
+        let path = std::path::Path::new(&config.dir_path);
+        if !path.exists() {
+            eprintln!("Error: Directory '{}' does not exist", config.dir_path);
+            std::process::exit(1);
+        }
+        if !path.is_dir() {
+            eprintln!("Error: '{}' is not a directory", config.dir_path);
+            std::process::exit(1);
         }
 
         CONFIG.set(config).ok();
