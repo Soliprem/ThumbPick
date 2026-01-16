@@ -25,8 +25,13 @@ pub fn spawn_image_loader(flowbox: FlowBox, dir_path: String, vi_mode: bool) {
 
 fn run_scan_and_decode(dir_path: String, sender: Sender<Vec<(PathBuf, gdk::Texture)>>) {
     let (path_tx, path_rx) = mpsc::sync_channel::<PathBuf>(1024);
+    let max_depth = if Config::global().recursive {
+        usize::MAX
+    } else {
+        1
+    };
     std::thread::spawn(move || {
-        let walker = WalkDir::new(dir_path).into_iter();
+        let walker = WalkDir::new(dir_path).max_depth(max_depth).into_iter();
         for entry in walker
             .filter_entry(|e| e.file_name().to_str() != Some(".git"))
             .flatten()

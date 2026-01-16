@@ -15,6 +15,10 @@ struct CliArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     vi_mode: Option<bool>,
 
+    #[arg(long, short = 'r', action = ArgAction::Set, num_args = 0..=1, default_missing_value = "true")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recursive: Option<bool>,
+
     #[arg(index = 1)]
     #[serde(skip_serializing_if = "Option::is_none")]
     dir_path: Option<String>,
@@ -27,6 +31,7 @@ struct CliArgs {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     pub vi_mode: bool,
+    pub recursive: bool,
     pub dir_path: String,
     pub thumb_size: i32,
     pub keys: KeyMap,
@@ -36,6 +41,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             vi_mode: false,
+            recursive: true,
             dir_path: ".".to_string(),
             thumb_size: 200,
             keys: KeyMap::default(),
