@@ -106,7 +106,9 @@ pub fn setup_keyboard_controller(
                     handle_selection(&flowbox);
                     return glib::Propagation::Stop;
                 }
-                Action::Quit => std::process::exit(0),
+                Action::Quit => {
+                    std::process::exit(Config::global().exit_error as i32)
+                }
                 _ => {}
             }
         };
