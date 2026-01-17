@@ -24,6 +24,10 @@ struct CliArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     recursive: Option<bool>,
 
+    #[arg(long, short = 'e', action = ArgAction::Set, num_args = 0..=1, default_missing_value = "true")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_error: Option<bool>,
+
     #[arg(index = 1)]
     #[serde(skip_serializing_if = "Option::is_none")]
     dir_path: Option<String>,
@@ -40,6 +44,7 @@ pub struct Config {
     pub dir_path: String,
     pub thumb_size: i32,
     pub keys: KeyMap,
+    pub exit_error: bool,
 }
 
 impl Default for Config {
@@ -50,6 +55,7 @@ impl Default for Config {
             dir_path: ".".to_string(),
             thumb_size: 200,
             keys: KeyMap::default(),
+            exit_error: true,
         }
     }
 }
