@@ -62,7 +62,7 @@
                   {
                     pname = "thumbpick";
                     version = "0.1.1";
-                    src = ./.;
+                    src = nixpkgs.lib.cleanSource self;
 
                     inherit buildInputs nativeBuildInputs;
                   };
