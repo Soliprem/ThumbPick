@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::config::Config;
+use crate::config::{Config, KeyMap};
 use crate::focus_jumpers::{focus_first_visible, focus_last_visible, focus_line_extremity};
 
 pub(crate) type SearchState = Rc<RefCell<String>>;
@@ -32,37 +32,71 @@ struct KeyResolver {
 
 impl KeyResolver {
     fn new() -> Self {
-        let keys = &Config::global().keys;
-        let mut map = HashMap::new();
-
-        // Helper to bind a config string to an action
-        let mut bind = |name: &str, action: Action| {
-            if let Some(key) = gdk::Key::from_name(name) {
-                map.insert(key, action);
-            }
-        };
-
-        // Bind from Config
-        bind(&keys.left, Action::Left);
-        bind(&keys.down, Action::Down);
-        bind(&keys.up, Action::Up);
-        bind(&keys.right, Action::Right);
-        bind(&keys.search, Action::Search);
-        bind(&keys.quit, Action::Quit);
-        bind(&keys.select, Action::Select);
-        bind(&keys.go_top, Action::GoTop);
-        bind(&keys.go_bottom, Action::GoBottom);
-        bind(&keys.line_start, Action::LineStart);
-        bind(&keys.line_end, Action::LineEnd);
-
-        // Hardcode secondary defaults if desired (e.g. Numpad Enter always works)
-        map.insert(gdk::Key::KP_Enter, Action::Select);
-
-        Self { map }
+        Self {
+            map: build_key_map(&Config::global().keys),
+        }
     }
 
     fn resolve(&self, keyval: gdk::Key) -> Action {
-        self.map.get(&keyval).copied().unwrap_or(Action::None)
+        resolve_action(&self.map, keyval)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SearchUpdate {
+    changed: bool,
+    current_text: String,
+}
+
+fn build_key_map(keys: &KeyMap) -> HashMap<gdk::Key, Action> {
+    let mut map = HashMap::new();
+
+    let mut bind = |name: &str, action: Action| {
+        if let Some(key) = gdk::Key::from_name(name) {
+            map.insert(key, action);
+        }
+    };
+
+    bind(&keys.left, Action::Left);
+    bind(&keys.down, Action::Down);
+    bind(&keys.up, Action::Up);
+    bind(&keys.right, Action::Right);
+    bind(&keys.search, Action::Search);
+    bind(&keys.quit, Action::Quit);
+    bind(&keys.select, Action::Select);
+    bind(&keys.go_top, Action::GoTop);
+    bind(&keys.go_bottom, Action::GoBottom);
+    bind(&keys.line_start, Action::LineStart);
+    bind(&keys.line_end, Action::LineEnd);
+
+    map.insert(gdk::Key::KP_Enter, Action::Select);
+
+    map
+}
+
+fn resolve_action(map: &HashMap<gdk::Key, Action>, keyval: gdk::Key) -> Action {
+    map.get(&keyval).copied().unwrap_or(Action::None)
+}
+
+fn update_search_query(query: &mut String, keyval: gdk::Key) -> SearchUpdate {
+    let mut changed = false;
+
+    if keyval == gdk::Key::BackSpace {
+        query.pop();
+        changed = true;
+    } else if keyval == gdk::Key::Escape {
+        query.clear();
+        changed = true;
+    } else if let Some(c) = keyval.to_unicode() {
+        if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ') {
+            query.push(c);
+            changed = true;
+        }
+    }
+
+    SearchUpdate {
+        changed,
+        current_text: query.clone(),
     }
 }
 
@@ -222,30 +256,16 @@ fn handle_search_input(
     flowbox: &FlowBox,
     label: &Label,
 ) -> glib::Propagation {
-    let (should_invalidate, current_text) = {
+    let update = {
         let mut query = query_state.borrow_mut();
-        let mut updated = false;
-
-        if keyval == gdk::Key::BackSpace {
-            query.pop();
-            updated = true;
-        } else if keyval == gdk::Key::Escape {
-            query.clear();
-            updated = true;
-        } else if let Some(c) = keyval.to_unicode() {
-            if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ') {
-                query.push(c);
-                updated = true;
-            }
-        }
-        (updated, query.clone())
+        update_search_query(&mut query, keyval)
     };
 
-    if should_invalidate {
-        if current_text.is_empty() {
+    if update.changed {
+        if update.current_text.is_empty() {
             label.set_visible(false);
         } else {
-            label.set_text(&format!("Search: {}", current_text));
+            label.set_text(&format!("Search: {}", update.current_text));
             label.set_visible(true);
         }
 
@@ -254,4 +274,59 @@ fn handle_search_input(
     }
 
     glib::Propagation::Proceed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_map_resolves_configured_actions_and_ignores_invalid_key_names() {
+        let keys = KeyMap {
+            up: "w".to_string(),
+            down: "not-a-real-gdk-key".to_string(),
+            ..Default::default()
+        };
+
+        let map = build_key_map(&keys);
+
+        assert_eq!(resolve_action(&map, gdk::Key::w), Action::Up);
+        assert_eq!(resolve_action(&map, gdk::Key::j), Action::None);
+        assert_eq!(resolve_action(&map, gdk::Key::KP_Enter), Action::Select);
+    }
+
+    #[test]
+    fn search_query_accepts_expected_printable_characters() {
+        let mut query = String::new();
+
+        for key in [
+            gdk::Key::a,
+            gdk::Key::_1,
+            gdk::Key::minus,
+            gdk::Key::underscore,
+            gdk::Key::period,
+            gdk::Key::space,
+        ] {
+            assert!(update_search_query(&mut query, key).changed);
+        }
+
+        assert_eq!(query, "a1-_. ");
+    }
+
+    #[test]
+    fn search_query_handles_backspace_escape_and_unsupported_keys() {
+        let mut query = "abc".to_string();
+
+        let update = update_search_query(&mut query, gdk::Key::BackSpace);
+        assert!(update.changed);
+        assert_eq!(update.current_text, "ab");
+
+        let update = update_search_query(&mut query, gdk::Key::Left);
+        assert!(!update.changed);
+        assert_eq!(update.current_text, "ab");
+
+        let update = update_search_query(&mut query, gdk::Key::Escape);
+        assert!(update.changed);
+        assert_eq!(update.current_text, "");
+    }
 }

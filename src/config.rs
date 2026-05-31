@@ -5,7 +5,7 @@ use figment::{
     Figment,
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -108,8 +108,8 @@ impl Config {
             std::process::exit(1);
         });
 
-        if let Ok(expanded) = shellexpand::full(&config.dir_path) {
-            config.dir_path = expanded.to_string();
+        if let Some(expanded) = expand_dir_path(&config.dir_path) {
+            config.dir_path = expanded;
         } else {
             // Handle error if a variable is missing (e.g. $INVALID_VAR)
             eprintln!(
@@ -117,13 +117,9 @@ impl Config {
                 config.dir_path
             );
         }
-        let path = std::path::Path::new(&config.dir_path);
-        if !path.exists() {
-            eprintln!("Error: Directory '{}' does not exist", config.dir_path);
-            std::process::exit(1);
-        }
-        if !path.is_dir() {
-            eprintln!("Error: '{}' is not a directory", config.dir_path);
+
+        if let Err(error) = validate_dir_path(&config.dir_path) {
+            eprintln!("Error: {error}");
             std::process::exit(1);
         }
 
@@ -150,12 +146,87 @@ fn build_figment(args: &CliArgs, config_path: Option<PathBuf>) -> Figment {
     builder.merge(Serialized::defaults(args))
 }
 
+fn expand_dir_path(path: &str) -> Option<String> {
+    shellexpand::full(path).ok().map(|path| path.to_string())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConfigPathError {
+    DoesNotExist(String),
+    NotDirectory(String),
+}
+
+impl std::fmt::Display for ConfigPathError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigPathError::DoesNotExist(path) => {
+                write!(f, "Directory '{path}' does not exist")
+            }
+            ConfigPathError::NotDirectory(path) => write!(f, "'{path}' is not a directory"),
+        }
+    }
+}
+
+fn validate_dir_path(path: &str) -> Result<(), ConfigPathError> {
+    let path_ref = Path::new(path);
+    if !path_ref.exists() {
+        return Err(ConfigPathError::DoesNotExist(path.to_string()));
+    }
+    if !path_ref.is_dir() {
+        return Err(ConfigPathError::NotDirectory(path.to_string()));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+    use std::fs;
     use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvGuard {
+        saved: Vec<(String, Option<OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn clear_prefixed(prefix: &str) -> Self {
+            let saved = std::env::vars_os()
+                .filter_map(|(key, value)| {
+                    let key = key.into_string().ok()?;
+                    key.starts_with(prefix).then_some((key, Some(value)))
+                })
+                .collect::<Vec<_>>();
+
+            for (key, _) in &saved {
+                std::env::remove_var(key);
+            }
+
+            Self { saved }
+        }
+
+        fn set(&mut self, key: &str, value: &str) {
+            if !self.saved.iter().any(|(saved_key, _)| saved_key == key) {
+                self.saved.push((key.to_string(), std::env::var_os(key)));
+            }
+            std::env::set_var(key, value);
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.saved.drain(..) {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
 
     fn empty_args() -> CliArgs {
         CliArgs {
@@ -167,14 +238,181 @@ mod tests {
         }
     }
 
+    fn temp_config(contents: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        path.push(format!(
+            "thumbpick-config-test-{}-{suffix}.toml",
+            std::process::id()
+        ));
+        fs::write(&path, contents).unwrap();
+        path
+    }
+
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new() -> Self {
+            let mut path = std::env::temp_dir();
+            let suffix = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            path.push(format!(
+                "thumbpick-config-dir-test-{}-{suffix}",
+                std::process::id()
+            ));
+            fs::create_dir(&path).unwrap();
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn extract_config(args: &CliArgs, config_path: Option<PathBuf>) -> Config {
+        build_figment(args, config_path).extract().unwrap()
+    }
+
+    #[test]
+    fn defaults_are_used_without_file_env_or_cli_overrides() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::clear_prefixed("THUMBPICK_");
+
+        let config = extract_config(&empty_args(), None);
+
+        assert!(!config.vi_mode);
+        assert!(config.recursive);
+        assert_eq!(config.dir_path, ".");
+        assert_eq!(config.thumb_size, 200);
+        assert_eq!(config.keys.up, "k");
+        assert_eq!(config.keys.search, "slash");
+        assert!(config.exit_error);
+    }
+
+    #[test]
+    fn config_file_overrides_defaults_without_replacing_unspecified_keys() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::clear_prefixed("THUMBPICK_");
+        let config_path = temp_config(
+            r#"
+vi_mode = true
+recursive = false
+thumb_size = 96
+
+[keys]
+up = "w"
+"#,
+        );
+
+        let config = extract_config(&empty_args(), Some(config_path.clone()));
+        fs::remove_file(config_path).unwrap();
+
+        assert!(config.vi_mode);
+        assert!(!config.recursive);
+        assert_eq!(config.thumb_size, 96);
+        assert_eq!(config.keys.up, "w");
+        assert_eq!(config.keys.down, "j");
+    }
+
     #[test]
     fn double_underscore_env_overrides_nested_key_config() {
         let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var("THUMBPICK_KEYS__UP", "t");
+        let mut env = EnvGuard::clear_prefixed("THUMBPICK_");
+        env.set("THUMBPICK_KEYS__UP", "t");
 
-        let config: Config = build_figment(&empty_args(), None).extract().unwrap();
+        let config = extract_config(&empty_args(), None);
 
-        std::env::remove_var("THUMBPICK_KEYS__UP");
         assert_eq!(config.keys.up, "t");
+    }
+
+    #[test]
+    fn env_overrides_config_file_and_cli_overrides_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let mut env = EnvGuard::clear_prefixed("THUMBPICK_");
+        env.set("THUMBPICK_THUMB_SIZE", "128");
+        env.set("THUMBPICK_KEYS__UP", "e");
+        let config_path = temp_config(
+            r#"
+thumb_size = 64
+
+[keys]
+up = "c"
+"#,
+        );
+        let mut args = empty_args();
+        args.thumb_size = Some(256);
+
+        let config = extract_config(&args, Some(config_path.clone()));
+        fs::remove_file(config_path).unwrap();
+
+        assert_eq!(config.thumb_size, 256);
+        assert_eq!(config.keys.up, "e");
+    }
+
+    #[test]
+    fn cli_args_parse_optional_boolean_flags_and_positional_dir() {
+        let args = CliArgs::parse_from([
+            "thumbpick",
+            "--vi-mode=false",
+            "-r",
+            "--exit-error=false",
+            "--thumb-size",
+            "144",
+            "/tmp",
+        ]);
+
+        assert_eq!(args.vi_mode, Some(false));
+        assert_eq!(args.recursive, Some(true));
+        assert_eq!(args.exit_error, Some(false));
+        assert_eq!(args.thumb_size, Some(144));
+        assert_eq!(args.dir_path, Some("/tmp".to_string()));
+    }
+
+    #[test]
+    fn path_validation_accepts_dirs_and_rejects_missing_paths_and_files() {
+        let temp = TempDir::new();
+        let file = temp.path().join("file.txt");
+        fs::write(&file, b"text").unwrap();
+        let missing = temp.path().join("missing");
+
+        assert_eq!(validate_dir_path(temp.path().to_str().unwrap()), Ok(()));
+        assert_eq!(
+            validate_dir_path(file.to_str().unwrap()),
+            Err(ConfigPathError::NotDirectory(
+                file.to_str().unwrap().to_string()
+            ))
+        );
+        assert_eq!(
+            validate_dir_path(missing.to_str().unwrap()),
+            Err(ConfigPathError::DoesNotExist(
+                missing.to_str().unwrap().to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn dir_path_expands_environment_variables() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let mut env = EnvGuard::clear_prefixed("THUMBPICK_TEST_");
+        env.set("THUMBPICK_TEST_DIR", "/tmp/thumbpick-test");
+
+        assert_eq!(
+            expand_dir_path("$THUMBPICK_TEST_DIR/images"),
+            Some("/tmp/thumbpick-test/images".to_string())
+        );
+        assert_eq!(expand_dir_path("$THUMBPICK_TEST_MISSING/images"), None);
     }
 }
