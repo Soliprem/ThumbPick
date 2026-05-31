@@ -1,11 +1,11 @@
 [package]
 name = "thumbpick"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "lightweight, scriptable, keyboard-centric image picker"
-repository = "https://github.com/soliprem/thumbpick"
-homepage = "https://github.com/soliprem/thumbpick"
+repository = "https://codeberg.org/soliprem/thumbpick"
+homepage = "https://codeberg.org/soliprem/thumbpick"
 readme = "README.md"
 categories = ["multimedia::images"]
 keywords = ["thumbnail", "images"]
