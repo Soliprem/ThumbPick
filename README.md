@@ -28,7 +28,13 @@ lacked one of these requirements, or also did a bunch more things I didn't need.
 ## Usage
 
 ```bash
-thumbpick <directory> [-v | --vi-mode]
+thumbpick [OPTIONS] <directory>
+
+# options
+-v, --vi-mode[true|false]      # Enable vi-style navigation/search mode
+-r, --recursive[true|false]    # Recursively scan subdirectories
+-e, --exit-error[true|false]   # Exit with status 1 when quitting without selection
+--thumb-size <pixels>           # Thumbnail size in pixels
 ```
 
 **Example:** Pipe the selected image to `feh` or a wallpaper setter:
@@ -62,21 +68,25 @@ not currently searching.
 | **Double Click**  | Open image immediately with `xdg-open`                                        |
 | **Enter**         | Print selected path to `stdout` and `exit` / Exit search mode, keeping filter |
 
-All options present in the config file (see below) can also be set with env vars. The env vars are derived as follows:
-`THUMBPICK_<option name in caps>`
+All options present in the config file (see below) can also be set with env
+vars. The env vars are derived as follows: `THUMBPICK_<option name in caps>`
 
 For nested options, use two underscores. Examples below.
-```
+
+```sh
 THUMBPICK_KEYS__UP=t thumbpick
 THUMBPICK_THUMB_SIZE=150 thumbpick
 ```
+
+By default, quitting without selecting an image exits with status 1. To have it
+be 0, set `exit_error = false`, or use the equivalent env var
+(`THUMBPICK_EXIT_ERROR=false`) or cli flag (`-e=false / --exit-error=false`)
 
 ## Installation
 
 ### Nix (via flakes)
 
-This project uses `naersk` and `fenix` to provide a reproducible build
-environment.
+This project uses `naersk` and `fenix`.
 
 **Run directly:**
 
@@ -113,6 +123,33 @@ environment.systemPackages = with pkgs; [
 
 Ready to go!
 
+To avoid compiling it, there's a cachix. Below there's an example on how to use
+it.
+
+```nix
+{
+  nix = {
+    settings = {
+      trusted-users = [
+        "root"
+        "@wheel"
+      ];
+      substituters = [
+                ...
+        "https://soliprem.cachix.org"
+                ...
+      ];
+      trusted-public-keys = [
+                ...
+        "soliprem.cachix.org-1:kwxQ2xmtoQJVrKUBvSkG/+03ZTuxn06Aebh8AZvtMPA="
+                ...
+      ];
+    };
+    optimise.automatic = true;
+  };
+}
+```
+
 ### Cargo
 
 ```bash
@@ -147,14 +184,20 @@ override specific values.
 environment variables (e.g., `$XDG_DATA_HOME/wallpapers`).
 
 ```toml
-# Default: false. Set to true to enable Vim-style navigation and behavior.
+# Set to true to enable Vim-style navigation and behavior.
 vi_mode = false
+
+# Recursively scan subdirectories.
+recursive = true
 
 # Start directory. Defaults to current directory if not set.
 dir_path = "." 
 
 # Thumbnail size in pixels.
 thumb_size = 200
+
+# Exit with status 1 when quitting without selecting an image.
+exit_error = true
 
 [keys]
 # Navigation
