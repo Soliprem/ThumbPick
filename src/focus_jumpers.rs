@@ -49,14 +49,17 @@ pub fn focus_line_extremity(flowbox: &FlowBox, start: bool) {
             iterator.next_sibling()
         };
 
-match next_step {
+        match next_step {
             Some(widget) => {
                 if let Ok(child) = widget.downcast::<gtk4::FlowBoxChild>() {
                     iterator = child;
                 } else {
                     break;
                 }
-                if !iterator.is_visible() || !iterator.is_sensitive() || !iterator.is_child_visible() {
+                if !iterator.is_visible()
+                    || !iterator.is_sensitive()
+                    || !iterator.is_child_visible()
+                {
                     continue;
                 }
                 if let Some(bounds) = iterator.compute_bounds(flowbox) {
@@ -73,4 +76,3 @@ match next_step {
     candidate.grab_focus();
     flowbox.select_child(&candidate);
 }
-

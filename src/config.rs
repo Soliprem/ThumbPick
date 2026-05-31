@@ -5,6 +5,7 @@ use figment::{
     Figment,
 };
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -100,18 +101,7 @@ impl Config {
             .map(|dirs| dirs.config_dir().join("config.toml"));
 
         let args = CliArgs::parse();
-
-        let mut builder = Figment::new();
-
-        builder = builder.merge(Serialized::defaults(Config::default()));
-
-        if let Some(path) = config_path {
-            builder = builder.merge(Toml::file(path));
-        }
-
-        builder = builder.merge(Env::prefixed("THUMBPICK_"));
-
-        builder = builder.merge(Serialized::defaults(&args));
+        let builder = build_figment(&args, config_path);
 
         let mut config: Config = builder.extract().unwrap_or_else(|e| {
             eprintln!("Failed to load configuration: {}", e);
@@ -143,5 +133,48 @@ impl Config {
 
     pub fn global() -> &'static Config {
         CONFIG.get().expect("Config is not initialized")
+    }
+}
+
+fn build_figment(args: &CliArgs, config_path: Option<PathBuf>) -> Figment {
+    let mut builder = Figment::new();
+
+    builder = builder.merge(Serialized::defaults(Config::default()));
+
+    if let Some(path) = config_path {
+        builder = builder.merge(Toml::file(path));
+    }
+
+    builder = builder.merge(Env::prefixed("THUMBPICK_").split("__"));
+
+    builder.merge(Serialized::defaults(args))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn empty_args() -> CliArgs {
+        CliArgs {
+            vi_mode: None,
+            recursive: None,
+            exit_error: None,
+            dir_path: None,
+            thumb_size: None,
+        }
+    }
+
+    #[test]
+    fn double_underscore_env_overrides_nested_key_config() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("THUMBPICK_KEYS__UP", "t");
+
+        let config: Config = build_figment(&empty_args(), None).extract().unwrap();
+
+        std::env::remove_var("THUMBPICK_KEYS__UP");
+        assert_eq!(config.keys.up, "t");
     }
 }

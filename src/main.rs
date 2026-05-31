@@ -16,9 +16,7 @@ const APP_ID: &str = "eu.soliprem.thumbpick";
 fn main() {
     let config = Config::parse();
     let app = Application::builder().application_id(APP_ID).build();
-    app.connect_activate(move |app| {
-        build_ui(app, &config.dir_path, config.vi_mode)
-    });
+    app.connect_activate(move |app| build_ui(app, &config.dir_path, config.vi_mode));
     app.run_with_args(&Vec::<String>::new());
 }
 
