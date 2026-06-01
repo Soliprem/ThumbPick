@@ -52,8 +52,8 @@ fn process_and_send_chunk(chunk: Vec<PathBuf>, sender: &Sender<Vec<(PathBuf, gdk
         .filter_map(|path| {
             let pixbuf = Pixbuf::from_file_at_scale(
                 path,
-                Config::global().thumb_size,
-                Config::global().thumb_size,
+                Config::global().size,
+                Config::global().size,
                 true,
             )
             .or_else(|_| {
@@ -62,8 +62,7 @@ fn process_and_send_chunk(chunk: Vec<PathBuf>, sender: &Sender<Vec<(PathBuf, gdk
                 let full = Pixbuf::from_file(path)?;
                 let width = full.width();
                 let height = full.height();
-                let scale =
-                    (Config::global().thumb_size as f64 / width.max(height) as f64).min(1.0);
+                let scale = (Config::global().size as f64 / width.max(height) as f64).min(1.0);
                 let new_width = (width as f64 * scale) as i32;
                 let new_height = (height as f64 * scale) as i32;
                 full.scale_simple(new_width, new_height, gdk_pixbuf::InterpType::Bilinear)

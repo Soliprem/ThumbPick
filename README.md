@@ -243,6 +243,18 @@ wev
 
 Notice the `sym: Return`. This generally works for me.
 
+## TODO
+
+- [ ] Man Page
+- [ ] Better flags/arguments
+  1. [x] Instead of True/False have (example) --vi/--no-vi
+  2. [ ] Just having _size_ is weird...
+- [ ] Completions (zsh, bash, fish)
+- [ ] Better config path
+- [?] Caching
+- [ ] Allow selecting multiple images (into array/newline separated)
+- [ ] More and saner(?) keybinds (options)
+
 ## License
 
 GNU General Public License v3.0.

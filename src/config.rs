@@ -1,4 +1,4 @@
-use clap::{ArgAction, Parser};
+use clap::Parser;
 use directories::ProjectDirs;
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -17,17 +17,20 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
     author = "soliprem me@soliprem.eu"
 )]
 struct CliArgs {
-    #[arg(long, short = 'v', action = ArgAction::Set, num_args = 0..=1, default_missing_value = "true")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    vi_mode: Option<bool>,
+    #[arg(long, short = 'v', overrides_with = "no_vi")]
+    vi: bool,
+    #[arg(long, short = 'n')]
+    no_vi: bool,
 
-    #[arg(long, short = 'r', action = ArgAction::Set, num_args = 0..=1, default_missing_value = "true")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    recursive: Option<bool>,
+    #[arg(long, short = 'r', overrides_with = "no_recursive")]
+    recursive: bool,
+    #[arg(long, short = 'R')]
+    no_recursive: bool,
 
-    #[arg(long, short = 'e', action = ArgAction::Set, num_args = 0..=1, default_missing_value = "true")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_error: Option<bool>,
+    #[arg(long, short = 'e', overrides_with = "no_err")]
+    err: bool,
+    #[arg(long, short = 'E')]
+    no_err: bool,
 
     #[arg(index = 1)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,28 +38,28 @@ struct CliArgs {
 
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    thumb_size: Option<i32>,
+    size: Option<i32>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub vi_mode: bool,
+    pub vi: bool,
     pub recursive: bool,
     pub dir_path: String,
-    pub thumb_size: i32,
+    pub size: i32,
     pub keys: KeyMap,
-    pub exit_error: bool,
+    pub err: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            vi_mode: false,
+            vi: false,
             recursive: true,
             dir_path: ".".to_string(),
-            thumb_size: 200,
+            size: 200,
             keys: KeyMap::default(),
-            exit_error: true,
+            err: true,
         }
     }
 }
@@ -230,11 +233,14 @@ mod tests {
 
     fn empty_args() -> CliArgs {
         CliArgs {
-            vi_mode: None,
-            recursive: None,
-            exit_error: None,
+            vi: false,
+            no_vi: false,
+            recursive: false,
+            no_recursive: false,
+            err: false,
+            no_err: false,
             dir_path: None,
-            thumb_size: None,
+            size: None,
         }
     }
 
@@ -293,13 +299,13 @@ mod tests {
 
         let config = extract_config(&empty_args(), None);
 
-        assert!(!config.vi_mode);
+        assert!(!config.vi);
         assert!(config.recursive);
         assert_eq!(config.dir_path, ".");
-        assert_eq!(config.thumb_size, 200);
+        assert_eq!(config.size, 200);
         assert_eq!(config.keys.up, "k");
         assert_eq!(config.keys.search, "slash");
-        assert!(config.exit_error);
+        assert!(config.err);
     }
 
     #[test]
@@ -308,9 +314,9 @@ mod tests {
         let _env = EnvGuard::clear_prefixed("THUMBPICK_");
         let config_path = temp_config(
             r#"
-vi_mode = true
+vi = true
 recursive = false
-thumb_size = 96
+size = 96
 
 [keys]
 up = "w"
@@ -320,9 +326,9 @@ up = "w"
         let config = extract_config(&empty_args(), Some(config_path.clone()));
         fs::remove_file(config_path).unwrap();
 
-        assert!(config.vi_mode);
+        assert!(config.vi);
         assert!(!config.recursive);
-        assert_eq!(config.thumb_size, 96);
+        assert_eq!(config.size, 96);
         assert_eq!(config.keys.up, "w");
         assert_eq!(config.keys.down, "j");
     }
@@ -346,19 +352,19 @@ up = "w"
         env.set("THUMBPICK_KEYS__UP", "e");
         let config_path = temp_config(
             r#"
-thumb_size = 64
+size = 64
 
 [keys]
 up = "c"
 "#,
         );
         let mut args = empty_args();
-        args.thumb_size = Some(256);
+        args.size = Some(256);
 
         let config = extract_config(&args, Some(config_path.clone()));
         fs::remove_file(config_path).unwrap();
 
-        assert_eq!(config.thumb_size, 256);
+        assert_eq!(config.size, 256);
         assert_eq!(config.keys.up, "e");
     }
 
@@ -366,18 +372,18 @@ up = "c"
     fn cli_args_parse_optional_boolean_flags_and_positional_dir() {
         let args = CliArgs::parse_from([
             "thumbpick",
-            "--vi-mode=false",
+            "--no-vi",
             "-r",
-            "--exit-error=false",
-            "--thumb-size",
+            "--err",
+            "--size",
             "144",
             "/tmp",
         ]);
 
-        assert_eq!(args.vi_mode, Some(false));
-        assert_eq!(args.recursive, Some(true));
-        assert_eq!(args.exit_error, Some(false));
-        assert_eq!(args.thumb_size, Some(144));
+        assert_eq!(args.vi, false);
+        assert_eq!(args.recursive, true);
+        assert_eq!(args.err, true);
+        assert_eq!(args.size, Some(144));
         assert_eq!(args.dir_path, Some("/tmp".to_string()));
     }
 
@@ -414,5 +420,15 @@ up = "c"
             Some("/tmp/thumbpick-test/images".to_string())
         );
         assert_eq!(expand_dir_path("$THUMBPICK_TEST_MISSING/images"), None);
+    }
+
+    #[test]
+    fn repeated_flags() {
+        let args = CliArgs::parse_from(["thumbpick", "--no-vi", "-eREv", "/tmp"]);
+
+        assert_eq!(args.vi, true);
+        assert_eq!(args.err, false);
+        assert_eq!(args.recursive, false);
+        assert_eq!(args.dir_path, Some("/tmp".to_string()));
     }
 }

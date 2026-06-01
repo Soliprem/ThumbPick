@@ -69,7 +69,7 @@ pub fn create_search_overlay(child: &impl IsA<gtk4::Widget>) -> (Overlay, Label)
 
 pub fn add_thumbnail_to_ui(flowbox: &FlowBox, path: PathBuf, texture: gdk::Texture, vi_mode: bool) {
     let picture = Picture::for_paintable(&texture);
-    picture.set_size_request(Config::global().thumb_size, Config::global().thumb_size);
+    picture.set_size_request(Config::global().size, Config::global().size);
     picture.set_can_shrink(true);
     picture.set_keep_aspect_ratio(true);
 
